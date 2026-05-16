@@ -47,6 +47,9 @@ export interface IUserProfile extends Document {
   power: number;
   alliance: string;
   warns: number;
+  weeklyPoints: number;
+  totalPoints: number;
+  eventsAttended: number;
   verifiedAt: Date;
   updatedAt: Date;
 }
@@ -60,6 +63,9 @@ const UserProfileSchema = new Schema<IUserProfile>(
     power: { type: Number, default: 0 },
     alliance: { type: String, default: "" },
     warns: { type: Number, default: 0 },
+    weeklyPoints: { type: Number, default: 0 },
+    totalPoints: { type: Number, default: 0 },
+    eventsAttended: { type: Number, default: 0 },
     verifiedAt: { type: Date, default: Date.now },
   },
   { timestamps: true, strict: true },

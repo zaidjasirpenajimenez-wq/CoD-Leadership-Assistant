@@ -7,6 +7,7 @@ import {
   Events,
   ChatInputCommandInteraction,
   ButtonInteraction,
+  ModalSubmitInteraction,
   Interaction,
 } from "discord.js";
 import { logger } from "../lib/logger";
@@ -21,6 +22,24 @@ import { resourceCommandDefs, handleResourceCommand, handleResourceButton } from
 import { sweeperCommandDefs, handleSweeperCommand } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
 import { setupCommandDefs, handleSetupCommand } from "./modules/setupCommands";
+import {
+  communicationCommandDefs,
+  handleAnnouncementCommand,
+  handleEventCommand,
+  handleCommunicationModal,
+  handleCommunicationButton,
+} from "./modules/communicationCommands";
+import {
+  operationsCommandDefs,
+  handleOperationsCommand,
+  handleOperationsButton,
+} from "./modules/operationsCommands";
+import {
+  pointsCommandDefs,
+  handlePerfilCommand,
+  handlePointsCommand,
+  handleBoxCommand,
+} from "./modules/pointsCommands";
 
 const ALL_COMMANDS = [
   ...modCommandDefs,
@@ -29,6 +48,9 @@ const ALL_COMMANDS = [
   ...sweeperCommandDefs,
   ...diplomacyCommandDefs,
   ...setupCommandDefs,
+  ...communicationCommandDefs,
+  ...operationsCommandDefs,
+  ...pointsCommandDefs,
 ];
 
 let discordClient: Client | null = null;
@@ -55,18 +77,16 @@ export async function startBot(): Promise<void> {
 
   discordClient = client;
 
-  // Register event listeners
   registerSentinel(client);
   registerVerificationListener(client);
 
   client.once(Events.ClientReady, async (ready) => {
     logger.info({ tag: ready.user.tag }, "Discord bot online");
 
-    // Register slash commands globally
     const rest = new REST({ version: "10" }).setToken(token);
     try {
       await rest.put(Routes.applicationCommands(ready.user.id), { body: ALL_COMMANDS });
-      logger.info("Slash commands registered globally");
+      logger.info({ count: ALL_COMMANDS.length }, "Slash commands registered globally");
     } catch (err) {
       logger.error({ err }, "Failed to register slash commands");
     }
@@ -78,6 +98,8 @@ export async function startBot(): Promise<void> {
         await handleChatCommand(interaction as ChatInputCommandInteraction);
       } else if (interaction.isButton()) {
         await handleButton(interaction as ButtonInteraction);
+      } else if (interaction.isModalSubmit()) {
+        await handleModal(interaction as ModalSubmitInteraction);
       }
     } catch (err) {
       logger.error({ err }, "Unhandled interaction error");
@@ -89,10 +111,9 @@ export async function startBot(): Promise<void> {
   });
 
   client.on(Events.ShardDisconnect, (event, shardId) => {
-    logger.warn({ shardId, code: event.code }, "Discord shard disconnected — attempting resume");
+    logger.warn({ shardId, code: event.code }, "Discord shard disconnected");
   });
 
-  // Auto-reconnect on disconnect
   client.on(Events.Invalidated, () => {
     logger.warn("Discord session invalidated — reconnecting in 10s");
     setTimeout(() => {
@@ -107,6 +128,7 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
   const { commandName } = interaction;
 
   switch (commandName) {
+    // ── Original modules ──────────────────────────────────────────────────
     case "mod":
       await handleModCommand(interaction);
       break;
@@ -125,6 +147,28 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "setup":
       await handleSetupCommand(interaction);
       break;
+    // ── New: Communication module ─────────────────────────────────────────
+    case "announcement":
+      await handleAnnouncementCommand(interaction);
+      break;
+    case "event":
+      await handleEventCommand(interaction);
+      break;
+    // ── New: Operations module ────────────────────────────────────────────
+    case "raid":
+    case "building":
+      await handleOperationsCommand(interaction);
+      break;
+    // ── New: Points module ────────────────────────────────────────────────
+    case "perfil":
+      await handlePerfilCommand(interaction);
+      break;
+    case "points":
+      await handlePointsCommand(interaction);
+      break;
+    case "box":
+      await handleBoxCommand(interaction);
+      break;
     default:
       await interaction.reply({ content: "Comando no reconocido.", ephemeral: true });
   }
@@ -135,8 +179,21 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
 
   if (customId.startsWith("alert_")) {
     await handleAlertButton(interaction);
-  } else if (customId.startsWith("res_")) {
+  } else if (customId.startsWith("res_") || customId.startsWith("sres_")) {
     await handleResourceButton(interaction);
+  } else if (customId.startsWith("ann_") || customId.startsWith("evt_")) {
+    await handleCommunicationButton(interaction);
+  } else if (customId.startsWith("raid_") || customId.startsWith("build_")) {
+    await handleOperationsButton(interaction);
+  }
+}
+
+async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
+  if (
+    interaction.customId === "modal_announcement" ||
+    interaction.customId === "modal_event"
+  ) {
+    await handleCommunicationModal(interaction);
   }
 }
 
