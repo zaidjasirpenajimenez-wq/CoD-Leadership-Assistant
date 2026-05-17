@@ -594,13 +594,41 @@ function MasterIntelPanel({ onLock }) {
   );
 }
 
+// ── Guild Avatar ──────────────────────────────────────────────────────────────
+function GuildAvatar({ guild, size = 48 }) {
+  const [err, setErr] = useState(false);
+  if (guild.icon && !err) {
+    return (
+      <img src={guild.icon} alt={guild.name} onError={() => setErr(true)}
+        className="rounded-xl object-cover shrink-0"
+        style={{ width: size, height: size }} />
+    );
+  }
+  const initials = (guild.name || "?").slice(0, 2).toUpperCase();
+  return (
+    <div className="rounded-xl bg-blue-900/60 border border-blue-800 flex items-center justify-center font-bold text-blue-300 shrink-0"
+      style={{ width: size, height: size, fontSize: size * 0.35 }}>
+      {initials}
+    </div>
+  );
+}
+
 // ── Public Alliance Panel ─────────────────────────────────────────────────────
 function PublicPanel({ guilds }) {
   const [selected, setSelected] = useState(null);
+  const [selectedGuild, setSelectedGuild] = useState(null);
   const [guildData, setGuildData] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [loading, setLoading] = useState(false);
   const [tab, setTab] = useState("stats");
+
+  // Auto-select if only 1 guild
+  useEffect(() => {
+    if (guilds.length === 1 && !selected) {
+      setSelected(guilds[0].guildId);
+      setSelectedGuild(guilds[0]);
+    }
+  }, [guilds]);
 
   useEffect(() => {
     if (!selected) return;
@@ -625,48 +653,99 @@ function PublicPanel({ guilds }) {
     { id:"diplomacy",  icon:"🛰️", label:"Diplomacia" },
   ];
 
+  const handleSelect = (g) => {
+    setSelected(g.guildId);
+    setSelectedGuild(g);
+  };
+
   return (
     <div className="slide-in">
-      <div className="mb-6">
-        <h2 className="text-lg font-bold text-gray-200 mb-1">Seleccionar Servidor</h2>
-        <p className="text-xs text-gray-600">Selecciona una alianza para ver sus estadísticas y ranking</p>
-      </div>
+      {/* Server selector — hidden if only 1 guild and it's already selected */}
+      {!(guilds.length === 1 && selected) && (
+        <div className="mb-6">
+          <h2 className="text-lg font-bold text-gray-200 mb-1">Seleccionar Servidor</h2>
+          <p className="text-xs text-gray-600">El bot está activo en {guilds.length} servidor{guilds.length !== 1 ? "es" : ""}</p>
+        </div>
+      )}
 
       {guilds.length === 0 ? (
         <div className="text-center py-16 text-gray-600">
           <div className="text-4xl mb-3">🏰</div>
-          <p>No hay servidores registrados aún</p>
-          <p className="text-xs mt-2">Configura el bot con <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-400">/setup alliance</code></p>
+          <p>El bot no está en ningún servidor aún</p>
+          <p className="text-xs mt-2">Invita el bot a tu servidor de Discord para comenzar</p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
-            {guilds.map(g => (
-              <button key={g.guildId} onClick={() => setSelected(g.guildId)}
-                className={`p-4 rounded-xl border text-left transition ${
-                  selected === g.guildId
-                    ? "border-blue-500 bg-blue-900/20 glow-blue"
-                    : "border-gray-800 bg-gray-900/40 hover:border-gray-700"
-                }`}>
-                <p className="font-bold text-white text-lg">[{g.allianceTag}]</p>
-                <p className="text-xs text-gray-600 mt-1 truncate">ID: {g.guildId}</p>
-              </button>
-            ))}
-          </div>
+          {/* Guild cards — only show if more than 1 or none selected yet */}
+          {(guilds.length > 1 || !selected) && (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-3 mb-6">
+              {guilds.map(g => (
+                <button key={g.guildId} onClick={() => handleSelect(g)}
+                  className={`p-4 rounded-xl border text-left transition flex items-center gap-3 ${
+                    selected === g.guildId
+                      ? "border-blue-500 bg-blue-900/20 glow-blue"
+                      : "border-gray-800 bg-gray-900/40 hover:border-gray-700 hover:bg-gray-900/60"
+                  }`}>
+                  <GuildAvatar guild={g} size={44} />
+                  <div className="flex-1 min-w-0">
+                    <p className="font-bold text-white truncate">{g.name}</p>
+                    {g.allianceTag
+                      ? <p className="text-xs text-blue-400 font-mono mt-0.5">[{g.allianceTag}]</p>
+                      : <p className="text-xs text-gray-600 mt-0.5">Sin configurar</p>
+                    }
+                    <p className="text-xs text-gray-600 mt-0.5">{fmtNum(g.memberCount)} miembros</p>
+                  </div>
+                  {selected === g.guildId && (
+                    <span className="w-2 h-2 rounded-full bg-blue-400 shrink-0" />
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
 
           {loading && <Spinner />}
 
           {guildData && !loading && (
             <div className="slide-in">
+              {/* Selected guild header */}
+              {selectedGuild && (
+                <div className="flex items-center gap-3 mb-5 pb-4 border-b border-gray-800">
+                  <GuildAvatar guild={selectedGuild} size={40} />
+                  <div>
+                    <h3 className="font-bold text-white">{selectedGuild.name}</h3>
+                    <p className="text-xs text-gray-500">
+                      {selectedGuild.allianceTag ? `[${selectedGuild.allianceTag}] · ` : ""}
+                      {fmtNum(selectedGuild.memberCount)} miembros en Discord
+                    </p>
+                  </div>
+                  {guilds.length > 1 && (
+                    <button onClick={() => { setSelected(null); setSelectedGuild(null); setGuildData(null); }}
+                      className="ml-auto text-xs text-gray-600 hover:text-gray-400 border border-gray-800 hover:border-gray-700 px-2 py-1 rounded-lg transition">
+                      ← Cambiar
+                    </button>
+                  )}
+                </div>
+              )}
+
               <Tabs tabs={TABS} active={tab} onChange={setTab} color="blue" />
 
               {tab === "stats" && (
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <StatCard label="Miembros Registrados" value={fmtNum(guildData.memberCount)} color="blue" icon="👥" />
-                  <StatCard label="Activos Esta Semana" value={fmtNum(guildData.activeCount)} color="green"
-                    sub={guildData.memberCount ? `${Math.round((guildData.activeCount/guildData.memberCount)*100)}% participación` : ""} icon="⚡" />
-                  <StatCard label="Con Advertencias" value={fmtNum(guildData.warnedCount)} color="red" icon="⚠️" />
-                  <StatCard label="Pactos Diplomáticos" value={fmtNum(guildData.pacts?.length)} color="gold" icon="🤝" />
+                <div>
+                  {!guildData.config ? (
+                    <div className="text-center py-12 text-gray-600">
+                      <div className="text-4xl mb-3">⚙️</div>
+                      <p className="text-gray-400 font-semibold mb-1">Servidor sin configurar</p>
+                      <p className="text-sm">Usa <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-300">/setup alliance</code> en Discord para activar el panel</p>
+                    </div>
+                  ) : (
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      <StatCard label="Registrados en Bot" value={fmtNum(guildData.memberCount)} color="blue" icon="👥" />
+                      <StatCard label="Activos Esta Semana" value={fmtNum(guildData.activeCount)} color="green"
+                        sub={guildData.memberCount ? `${Math.round((guildData.activeCount/guildData.memberCount)*100)}% participación` : ""} icon="⚡" />
+                      <StatCard label="Con Advertencias" value={fmtNum(guildData.warnedCount)} color="red" icon="⚠️" />
+                      <StatCard label="Pactos Diplomáticos" value={fmtNum(guildData.pacts?.length)} color="gold" icon="🤝" />
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -758,7 +837,7 @@ function App() {
 
   useEffect(() => {
     apiFetch("/api/healthz").then(h => setHealth(h));
-    apiFetch("/api/dashboard/guilds").then(d => setGuilds(d?.guilds ?? []));
+    apiFetch("/api/dashboard/bot-guilds").then(d => setGuilds(d?.guilds ?? []));
   }, []);
 
   const handleLogoClick = () => {

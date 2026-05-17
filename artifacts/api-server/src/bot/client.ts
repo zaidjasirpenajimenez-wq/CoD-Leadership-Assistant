@@ -71,6 +71,10 @@ const ALL_COMMANDS = [
 
 let discordClient: Client | null = null;
 
+export function getDiscordClient(): Client | null {
+  return discordClient;
+}
+
 export async function startBot(): Promise<void> {
   const token = process.env["DISCORD_TOKEN"];
   if (!token) {
@@ -252,8 +256,4 @@ async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
   ) {
     await handleCommunicationModal(interaction);
   }
-}
-
-export function getDiscordClient(): Client | null {
-  return discordClient;
 }

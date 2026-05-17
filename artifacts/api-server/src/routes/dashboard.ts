@@ -9,6 +9,7 @@ import {
 } from "../db/schemas";
 import { isMongoConnected } from "../db/mongoose";
 import { logger } from "../lib/logger";
+import { getDiscordClient } from "../bot/client";
 
 const router = Router();
 
@@ -29,6 +30,45 @@ function requireMongo(res: Response): boolean {
 }
 
 // ── Public ────────────────────────────────────────────────────────────────────
+
+// Returns all servers the bot is currently in, merged with MongoDB config data
+router.get("/api/dashboard/bot-guilds", async (req: Request, res: Response) => {
+  try {
+    const discordClient = getDiscordClient();
+    if (!discordClient) {
+      res.json({ guilds: [] });
+      return;
+    }
+
+    // Fetch MongoDB configs for guilds that have run /setup alliance
+    let configs: Array<{ guildId: string; allianceTag: string }> = [];
+    if (isMongoConnected()) {
+      configs = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    }
+    const configMap = new Map(configs.map((c) => [c.guildId, c.allianceTag]));
+
+    const guilds = discordClient.guilds.cache.map((g) => ({
+      guildId: g.id,
+      name: g.name,
+      icon: g.iconURL({ size: 64 }) ?? null,
+      memberCount: g.memberCount,
+      allianceTag: configMap.get(g.id) ?? null,
+      configured: configMap.has(g.id),
+    }));
+
+    // Sort: configured first, then by member count
+    guilds.sort((a, b) => {
+      if (a.configured && !b.configured) return -1;
+      if (!a.configured && b.configured) return 1;
+      return b.memberCount - a.memberCount;
+    });
+
+    res.json({ guilds });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/bot-guilds error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
 
 router.get("/api/dashboard/guilds", async (req: Request, res: Response) => {
   if (!requireMongo(res)) return;
