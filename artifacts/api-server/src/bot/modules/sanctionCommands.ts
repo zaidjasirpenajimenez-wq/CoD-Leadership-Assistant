@@ -4,7 +4,7 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
-import { SanctionRecord } from "../../db/schemas";
+import { SanctionRecord, UserProfile } from "../../db/schemas";
 import { logger } from "../../lib/logger";
 
 export const sanctionCommandDefs = [
@@ -82,6 +82,22 @@ export async function handleSanctionCommand(
         addedBy: interaction.user.id,
       });
 
+      // Auto-deduct points based on sanction severity
+      const SANCTION_PENALTY: Record<string, number> = {
+        FALTA_GUERRA: 20,
+        AUSENCIA_EVENTO: 10,
+        PENALIZACION: 5,
+        OTRO: 0,
+      };
+      const penalty = SANCTION_PENALTY[tipo] ?? 0;
+      if (penalty > 0) {
+        await UserProfile.findOneAndUpdate(
+          { discordId: target.id, guildId },
+          { $inc: { weeklyPoints: -penalty, totalPoints: -penalty } },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        ).catch(() => {});
+      }
+
       const totalSanctions = await SanctionRecord.countDocuments({ guildId, discordId: target.id });
 
       await interaction.reply({
@@ -94,6 +110,7 @@ export async function handleSanctionCommand(
               { name: "Tipo", value: `${TYPE_EMOJI[tipo]} ${TYPE_LABEL[tipo]}`, inline: true },
               { name: "Total de sanciones", value: String(totalSanctions), inline: true },
               { name: "Motivo", value: razon, inline: false },
+              { name: "Penalización automática", value: penalty > 0 ? `-${penalty} puntos` : "Sin deducción", inline: true },
               { name: "Registrado por", value: `<@${interaction.user.id}>`, inline: true },
             )
             .setTimestamp()

@@ -4,13 +4,14 @@ import {
   PermissionFlagsBits,
   SlashCommandBuilder,
 } from "discord.js";
-import { UserProfile } from "../../db/schemas";
+import { UserProfile, SanctionRecord, KvkRecord } from "../../db/schemas";
+import { computeMerits } from "./meritSystem";
 import { logger } from "../../lib/logger";
 
 export const pointsCommandDefs = [
   new SlashCommandBuilder()
     .setName("perfil")
-    .setDescription("Ver tu hoja de servicio militar"),
+    .setDescription("Ver tu hoja de servicio militar completa"),
 
   new SlashCommandBuilder()
     .setName("points")
@@ -79,60 +80,71 @@ export async function handlePerfilCommand(
   const userId = interaction.user.id;
   const guildId = interaction.guild.id;
 
+  await interaction.deferReply({ ephemeral: true });
+
   try {
-    const profile = await UserProfile.findOne({ discordId: userId, guildId });
+    const [profile, sanctionCount, kvkRecord] = await Promise.all([
+      UserProfile.findOne({ discordId: userId, guildId }).lean(),
+      SanctionRecord.countDocuments({ guildId, discordId: userId }),
+      KvkRecord.findOne({ guildId, discordId: userId }).sort({ updatedAt: -1 }).lean(),
+    ]);
+
+    const merits = computeMerits({
+      totalPoints: profile?.totalPoints ?? 0,
+      eventsAttended: profile?.eventsAttended ?? 0,
+      weeklyPoints: profile?.weeklyPoints ?? 0,
+      sanctions: sanctionCount,
+      kvkKills: kvkRecord?.kills ?? 0,
+    });
+
+    const lastActivityTs = profile?.lastActivity
+      ? Math.floor(new Date(profile.lastActivity).getTime() / 1000)
+      : null;
 
     const embed = new EmbedBuilder()
       .setTitle(`📋 Hoja de Servicio — ${interaction.user.displayName}`)
       .setColor(0x4488ff)
       .setThumbnail(interaction.user.displayAvatarURL())
       .addFields(
-        {
-          name: "⭐ Puntos Semanales",
-          value: String(profile?.weeklyPoints ?? 0),
-          inline: true,
-        },
-        {
-          name: "🏆 Puntos Totales",
-          value: String(profile?.totalPoints ?? 0),
-          inline: true,
-        },
-        {
-          name: "📅 Eventos Asistidos",
-          value: String(profile?.eventsAttended ?? 0),
-          inline: true,
-        },
-        {
-          name: "🎮 IGN en Juego",
-          value: profile?.ign ?? "No registrado",
-          inline: true,
-        },
+        { name: "⭐ Puntos Semanales", value: String(profile?.weeklyPoints ?? 0), inline: true },
+        { name: "🏆 Puntos Totales", value: String(profile?.totalPoints ?? 0), inline: true },
+        { name: "📅 Eventos Asistidos", value: String(profile?.eventsAttended ?? 0), inline: true },
+        { name: "🎮 IGN en Juego", value: profile?.ign || "No verificado", inline: true },
         {
           name: "⚡ Poder",
           value: profile?.power ? profile.power.toLocaleString("es-ES") : "No registrado",
           inline: true,
         },
+        { name: "⚠️ Advertencias", value: `${profile?.warns ?? 0}/3`, inline: true },
+        { name: "📋 Sanciones Totales", value: String(sanctionCount), inline: true },
         {
-          name: "⚠️ Advertencias",
-          value: `${profile?.warns ?? 0}/3`,
+          name: "🕐 Última Actividad",
+          value: lastActivityTs ? `<t:${lastActivityTs}:R>` : "Sin registros",
           inline: true,
+        },
+        {
+          name: "🔢 Kills KVK",
+          value: kvkRecord ? `${kvkRecord.kills.toLocaleString()} kills · ${kvkRecord.powerDestroyed.toLocaleString()} poder destruido` : "Sin registro KVK",
+          inline: false,
         },
       )
       .setTimestamp()
-      .setFooter({ text: "Kingdom Guardian Pro — Sistema de Puntos Semanales" });
+      .setFooter({ text: "Kingdom Guardian Pro — Hoja de Servicio" });
 
-    if (!profile) {
-      embed.setDescription(
-        "⚠️ No tienes un perfil registrado. Verifica tu cuenta en el canal de verificación.",
-      );
+    if (merits.length > 0) {
+      embed.addFields({ name: "🎖️ Méritos y Medallas", value: merits.join("  "), inline: false });
+    } else if (!profile) {
+      embed.setDescription("⚠️ No tienes perfil registrado. Verifica tu cuenta en el canal de verificación.");
     }
 
-    await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.editReply({ embeds: [embed] });
   } catch (err) {
     logger.error({ err }, "Perfil command error");
-    await interaction.reply({ content: "❌ Error al obtener tu perfil.", ephemeral: true });
+    await interaction.editReply({ content: "❌ Error al obtener tu perfil." });
   }
 }
+
+const NOW = () => new Date();
 
 export async function handlePointsCommand(
   interaction: ChatInputCommandInteraction,
@@ -148,7 +160,7 @@ export async function handlePointsCommand(
 
       const updated = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },
-        { $inc: { weeklyPoints: cantidad, totalPoints: cantidad } },
+        { $inc: { weeklyPoints: cantidad, totalPoints: cantidad }, $set: { lastActivity: NOW() } },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
 
@@ -173,7 +185,7 @@ export async function handlePointsCommand(
 
       const updated = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },
-        { $inc: { weeklyPoints: -cantidad, totalPoints: -cantidad } },
+        { $inc: { weeklyPoints: -cantidad, totalPoints: -cantidad }, $set: { lastActivity: NOW() } },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
 
@@ -185,11 +197,7 @@ export async function handlePointsCommand(
             .addFields(
               { name: "Jugador", value: `<@${target.id}>`, inline: true },
               { name: "Puntos descontados", value: `-${cantidad}`, inline: true },
-              {
-                name: "Total semanal",
-                value: String(Math.max(0, updated?.weeklyPoints ?? 0)),
-                inline: true,
-              },
+              { name: "Total semanal", value: String(Math.max(0, updated?.weeklyPoints ?? 0)), inline: true },
             )
             .setTimestamp(),
         ],
@@ -207,11 +215,7 @@ export async function handlePointsCommand(
       }
 
       await interaction.deferReply();
-
-      const result = await UserProfile.updateMany(
-        { guildId },
-        { $set: { weeklyPoints: 0 } },
-      );
+      const result = await UserProfile.updateMany({ guildId }, { $set: { weeklyPoints: 0 } });
 
       await interaction.editReply({
         embeds: [
@@ -250,7 +254,6 @@ export async function handleBoxCommand(
   await interaction.deferReply();
 
   try {
-    // Filter eligible members
     const elegibles = await UserProfile.find({
       guildId,
       weeklyPoints: { $gte: puntosMin },
@@ -271,7 +274,6 @@ export async function handleBoxCommand(
       return;
     }
 
-    // Pick random winners (no repeats)
     const shuffled = [...elegibles].sort(() => Math.random() - 0.5);
     const winners = shuffled.slice(0, Math.min(numGanadores, elegibles.length));
 
@@ -279,27 +281,29 @@ export async function handleBoxCommand(
       .map((w, i) => `**${i + 1}.** <@${w.discordId}> — ${w.weeklyPoints} pts`)
       .join("\n");
 
-    const embed = new EmbedBuilder()
-      .setTitle("🎉 SORTEO DE COFRES PREMIUM — RESULTADOS")
-      .setColor(0xffd700)
-      .setDescription(`@here\n\n¡El azar ha hablado! Estos soldados han ganado los cofres premium de la semana:`)
-      .addFields(
-        { name: "🏆 Ganadores", value: winnersText, inline: false },
-        {
-          name: "📊 Estadísticas del sorteo",
-          value: [
-            `Puntos mínimos: **${puntosMin}**`,
-            `Elegibles: **${elegibles.length}** soldados`,
-            `Ganadores: **${winners.length}**`,
-          ].join("\n"),
-          inline: false,
-        },
-        { name: "Sorteo ejecutado por", value: `<@${interaction.user.id}>`, inline: true },
-      )
-      .setTimestamp()
-      .setFooter({ text: "Kingdom Guardian Pro — Sistema de Recompensas Transparente" });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle("🎉 SORTEO DE COFRES PREMIUM — RESULTADOS")
+          .setColor(0xffd700)
+          .setDescription("@here\n\n¡El azar ha hablado! Estos soldados han ganado los cofres premium de la semana:")
+          .addFields(
+            { name: "🏆 Ganadores", value: winnersText, inline: false },
+            {
+              name: "📊 Estadísticas del sorteo",
+              value: [
+                `Puntos mínimos: **${puntosMin}**`,
+                `Elegibles: **${elegibles.length}** soldados`,
+                `Ganadores: **${winners.length}**`,
+              ].join("\n"),
+              inline: false,
+            },
+            { name: "Sorteo ejecutado por", value: `<@${interaction.user.id}>`, inline: true },
+          )
+          .setTimestamp()
+          .setFooter({ text: "Kingdom Guardian Pro — Sistema de Recompensas Transparente" }),
+      ],
+    });
   } catch (err) {
     logger.error({ err }, "Box giveaway error");
     await interaction.editReply({ content: "❌ Error al ejecutar el sorteo." });

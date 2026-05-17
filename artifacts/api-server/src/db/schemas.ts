@@ -11,7 +11,10 @@ export interface IGuildConfig extends Document {
     resourceRequests?: string;
     playerVerification?: string;
     modLogs?: string;
+    leaderboard?: string;
+    announcements?: string;
   };
+  inactiveDays: number;
   authorizedRoles: string[];
   createdAt: Date;
   updatedAt: Date;
@@ -28,7 +31,10 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
       resourceRequests: String,
       playerVerification: String,
       modLogs: String,
+      leaderboard: String,
+      announcements: String,
     },
+    inactiveDays: { type: Number, default: 7 },
     authorizedRoles: [{ type: String }],
   },
   { timestamps: true, strict: true },
@@ -50,6 +56,7 @@ export interface IUserProfile extends Document {
   weeklyPoints: number;
   totalPoints: number;
   eventsAttended: number;
+  lastActivity: Date;
   verifiedAt: Date;
   updatedAt: Date;
 }
@@ -58,14 +65,15 @@ const UserProfileSchema = new Schema<IUserProfile>(
   {
     discordId: { type: String, required: true, index: true },
     guildId: { type: String, required: true, index: true },
-    characterId: { type: String, required: true, unique: true },
-    ign: { type: String, required: true },
+    characterId: { type: String, default: "" },
+    ign: { type: String, default: "" },
     power: { type: Number, default: 0 },
     alliance: { type: String, default: "" },
     warns: { type: Number, default: 0 },
     weeklyPoints: { type: Number, default: 0 },
     totalPoints: { type: Number, default: 0 },
     eventsAttended: { type: Number, default: 0 },
+    lastActivity: { type: Date, default: Date.now, index: true },
     verifiedAt: { type: Date, default: Date.now },
   },
   { timestamps: true, strict: true },

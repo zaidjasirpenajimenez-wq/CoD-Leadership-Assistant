@@ -13,7 +13,7 @@ import {
   TextInputStyle,
   TextChannel,
 } from "discord.js";
-import { UserProfile, GuildConfig } from "../../db/schemas";
+import { UserProfile, GuildConfig, ScheduledTimer } from "../../db/schemas";
 import { logger } from "../../lib/logger";
 
 export const communicationCommandDefs = [
@@ -209,8 +209,33 @@ export async function handleCommunicationModal(
         .setStyle(ButtonStyle.Danger),
     );
     await msg.edit({ components: [realRow] });
-    await interaction.editReply({ content: "✅ Evento publicado." });
+
+    // Auto-schedule a 30-min reminder if we can parse the date/time from evt_date
+    try {
+      const reminderTime = parseEventDate(date);
+      if (reminderTime && reminderTime.getTime() - Date.now() > 35 * 60_000 && interaction.channelId) {
+        const fireAt = new Date(reminderTime.getTime() - 30 * 60_000);
+        await ScheduledTimer.create({
+          guildId: interaction.guild!.id,
+          channelId: interaction.channelId as string,
+          message: `⏰ **Recordatorio:** El evento **${name}** comienza en **30 minutos**! (${date})`,
+          fireAt,
+          fired: false,
+          createdBy: interaction.user.id,
+        });
+      }
+    } catch {}
+
+    await interaction.editReply({ content: "✅ Evento publicado. Si la hora es válida, el bot enviará un recordatorio 30 min antes automáticamente." });
   }
+}
+
+/** Try to parse a date string from event format like "Sábado 21:00 UTC" or "2025-06-15 21:00 UTC" */
+function parseEventDate(input: string): Date | null {
+  // Try absolute ISO-style parse first
+  const abs = new Date(input.replace("UTC", "").trim() + " UTC");
+  if (!isNaN(abs.getTime()) && abs > new Date()) return abs;
+  return null;
 }
 
 export async function handleCommunicationButton(

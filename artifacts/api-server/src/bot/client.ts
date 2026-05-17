@@ -44,8 +44,10 @@ import { kvkCommandDefs, handleKvkCommand } from "./modules/kvkCommands";
 import { sanctionCommandDefs, handleSanctionCommand } from "./modules/sanctionCommands";
 import { rallyCommandDefs, handleRallyCommand, handleRallyButton } from "./modules/rallyCommands";
 import { sosCommandDefs, handleSosCommand, handleSosButton } from "./modules/sosCommands";
-import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeaderboard } from "./modules/timerCommands";
+import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeaderboard, startInactivityChecker } from "./modules/timerCommands";
 import { leaderboardCommandDefs, handleLeaderboardCommand } from "./modules/leaderboardCommands";
+import { statsCommandDefs, handleStatsCommand } from "./modules/statsCommands";
+import { memberCommandDefs, handleMemberCommand } from "./modules/memberCommands";
 
 const ALL_COMMANDS = [
   ...modCommandDefs,
@@ -63,6 +65,8 @@ const ALL_COMMANDS = [
   ...sosCommandDefs,
   ...timerCommandDefs,
   ...leaderboardCommandDefs,
+  ...statsCommandDefs,
+  ...memberCommandDefs,
 ];
 
 let discordClient: Client | null = null;
@@ -106,6 +110,7 @@ export async function startBot(): Promise<void> {
     // Start lightweight background schedulers
     startScheduler(client);
     startWeeklyLeaderboard(client);
+    startInactivityChecker(client);
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -208,6 +213,14 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     // ── Leaderboard ───────────────────────────────────────────────────────
     case "leaderboard":
       await handleLeaderboardCommand(interaction);
+      break;
+    // ── Estadísticas globales ─────────────────────────────────────────────
+    case "stats":
+      await handleStatsCommand(interaction);
+      break;
+    // ── Gestión de miembros ───────────────────────────────────────────────
+    case "member":
+      await handleMemberCommand(interaction);
       break;
     default:
       await interaction.reply({ content: "Comando no reconocido.", ephemeral: true });

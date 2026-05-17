@@ -251,6 +251,59 @@ async function checkExpiringPacts(client: Client): Promise<void> {
   }
 }
 
+/** Check inactivity daily and notify modLogs channel — runs every hour */
+export function startInactivityChecker(client: Client): void {
+  const INTERVAL_MS = 60 * 60_000; // every hour
+  let lastCheck = "";
+
+  setInterval(async () => {
+    try {
+      const now = new Date();
+      // Only run once per day at 08:00 UTC
+      if (now.getUTCHours() !== 8) return;
+      const dayKey = now.toISOString().slice(0, 10);
+      if (lastCheck === dayKey) return;
+      lastCheck = dayKey;
+
+      const guilds = await GuildConfig.find({}).lean();
+      for (const config of guilds) {
+        const inactiveDays = config.inactiveDays ?? 7;
+        const cutoff = new Date(Date.now() - inactiveDays * 86_400_000);
+        const inactiveCount = await UserProfile.countDocuments({
+          guildId: config.guildId,
+          lastActivity: { $lt: cutoff },
+        });
+
+        if (inactiveCount === 0) continue;
+
+        const channelId = config.channels?.modLogs;
+        if (!channelId) continue;
+        const guild = client.guilds.cache.get(config.guildId);
+        if (!guild) continue;
+        const chan = guild.channels.cache.get(channelId) as TextChannel | undefined;
+        if (!chan) continue;
+
+        await chan.send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("👻 ALERTA DE INACTIVIDAD — CONTROL DIARIO")
+              .setColor(0xff8800)
+              .setDescription(
+                `Se detectaron **${inactiveCount}** soldados sin actividad en los últimos **${inactiveDays} días**.\n\nUsa \`/stats inactivity\` para ver la lista completa.`,
+              )
+              .setTimestamp()
+              .setFooter({ text: "Kingdom Guardian Pro — Control de Inactividad" }),
+          ],
+        });
+      }
+    } catch (err) {
+      logger.error({ err }, "Inactivity checker error");
+    }
+  }, INTERVAL_MS);
+
+  logger.info("Inactivity checker started (hourly)");
+}
+
 /** Auto-post weekly leaderboard every Monday 00:05 UTC and reset weekly points */
 export function startWeeklyLeaderboard(client: Client): void {
   const CHECK_INTERVAL = 5 * 60_000; // Check every 5 minutes
@@ -281,7 +334,8 @@ export function startWeeklyLeaderboard(client: Client): void {
 
 export async function postWeeklyLeaderboard(client: Client, guildId: string): Promise<void> {
   const config = await GuildConfig.findOne({ guildId }).lean();
-  const channelId = config?.channels?.modLogs;
+  // Prefer dedicated leaderboard channel, fall back to modLogs
+  const channelId = config?.channels?.leaderboard ?? config?.channels?.modLogs;
   if (!channelId) return;
 
   const guild = client.guilds.cache.get(guildId);
