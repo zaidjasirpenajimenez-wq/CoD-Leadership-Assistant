@@ -40,6 +40,12 @@ import {
   handlePointsCommand,
   handleBoxCommand,
 } from "./modules/pointsCommands";
+import { kvkCommandDefs, handleKvkCommand } from "./modules/kvkCommands";
+import { sanctionCommandDefs, handleSanctionCommand } from "./modules/sanctionCommands";
+import { rallyCommandDefs, handleRallyCommand, handleRallyButton } from "./modules/rallyCommands";
+import { sosCommandDefs, handleSosCommand, handleSosButton } from "./modules/sosCommands";
+import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeaderboard } from "./modules/timerCommands";
+import { leaderboardCommandDefs, handleLeaderboardCommand } from "./modules/leaderboardCommands";
 
 const ALL_COMMANDS = [
   ...modCommandDefs,
@@ -51,6 +57,12 @@ const ALL_COMMANDS = [
   ...communicationCommandDefs,
   ...operationsCommandDefs,
   ...pointsCommandDefs,
+  ...kvkCommandDefs,
+  ...sanctionCommandDefs,
+  ...rallyCommandDefs,
+  ...sosCommandDefs,
+  ...timerCommandDefs,
+  ...leaderboardCommandDefs,
 ];
 
 let discordClient: Client | null = null;
@@ -90,6 +102,10 @@ export async function startBot(): Promise<void> {
     } catch (err) {
       logger.error({ err }, "Failed to register slash commands");
     }
+
+    // Start lightweight background schedulers
+    startScheduler(client);
+    startWeeklyLeaderboard(client);
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -147,19 +163,19 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "setup":
       await handleSetupCommand(interaction);
       break;
-    // ── New: Communication module ─────────────────────────────────────────
+    // ── Communication ─────────────────────────────────────────────────────
     case "announcement":
       await handleAnnouncementCommand(interaction);
       break;
     case "event":
       await handleEventCommand(interaction);
       break;
-    // ── New: Operations module ────────────────────────────────────────────
+    // ── Operations ────────────────────────────────────────────────────────
     case "raid":
     case "building":
       await handleOperationsCommand(interaction);
       break;
-    // ── New: Points module ────────────────────────────────────────────────
+    // ── Points ────────────────────────────────────────────────────────────
     case "perfil":
       await handlePerfilCommand(interaction);
       break;
@@ -168,6 +184,30 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
       break;
     case "box":
       await handleBoxCommand(interaction);
+      break;
+    // ── KVK Tracker ───────────────────────────────────────────────────────
+    case "kvk":
+      await handleKvkCommand(interaction);
+      break;
+    // ── Libro de Sanciones ────────────────────────────────────────────────
+    case "sanction":
+      await handleSanctionCommand(interaction);
+      break;
+    // ── Rally Coordinator ─────────────────────────────────────────────────
+    case "rally":
+      await handleRallyCommand(interaction);
+      break;
+    // ── SOS Emergencia ────────────────────────────────────────────────────
+    case "sos":
+      await handleSosCommand(interaction);
+      break;
+    // ── Timers / Recordatorios ────────────────────────────────────────────
+    case "timer":
+      await handleTimerCommand(interaction);
+      break;
+    // ── Leaderboard ───────────────────────────────────────────────────────
+    case "leaderboard":
+      await handleLeaderboardCommand(interaction);
       break;
     default:
       await interaction.reply({ content: "Comando no reconocido.", ephemeral: true });
@@ -185,6 +225,10 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await handleCommunicationButton(interaction);
   } else if (customId.startsWith("raid_") || customId.startsWith("build_")) {
     await handleOperationsButton(interaction);
+  } else if (customId.startsWith("rally_join:") || customId.startsWith("rally_leave:")) {
+    await handleRallyButton(interaction);
+  } else if (customId.startsWith("sos_go:")) {
+    await handleSosButton(interaction);
   }
 }
 

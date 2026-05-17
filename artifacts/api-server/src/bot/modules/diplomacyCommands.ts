@@ -33,6 +33,14 @@ export const diplomacyCommandDefs = [
         )
         .addStringOption((o) =>
           o.setName("detalles").setDescription("Detalles del pacto").setRequired(false),
+        )
+        .addIntegerOption((o) =>
+          o
+            .setName("dias_expiracion")
+            .setDescription("Días hasta que expire el pacto (ej: 30 para NAP de 30 días)")
+            .setRequired(false)
+            .setMinValue(1)
+            .setMaxValue(365),
         ),
     ),
 ].map((b) => b.toJSON());
@@ -92,10 +100,21 @@ export async function handleDiplomacyCommand(interaction: ChatInputCommandIntera
       const alianza = interaction.options.getString("alianza", true);
       const tipo = interaction.options.getString("tipo", true) as "NAP" | "ALLY" | "ENEMY" | "BORDER";
       const detalles = interaction.options.getString("detalles") ?? "";
+      const diasExpiracion = interaction.options.getInteger("dias_expiracion");
+
+      const expiresAt = diasExpiracion
+        ? new Date(Date.now() + diasExpiracion * 86_400_000)
+        : null;
 
       await DiplomacyPact.findOneAndUpdate(
         { guildId, targetAlliance: alianza },
-        { pactType: tipo, details: detalles, createdBy: interaction.user.id, createdAt: new Date() },
+        {
+          pactType: tipo,
+          details: detalles,
+          createdBy: interaction.user.id,
+          createdAt: new Date(),
+          expiresAt,
+        },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
 
@@ -106,9 +125,21 @@ export async function handleDiplomacyCommand(interaction: ChatInputCommandIntera
           { name: "Alianza", value: alianza, inline: true },
           { name: "Tipo", value: PACT_LABELS[tipo] ?? tipo, inline: true },
           { name: "Detalles", value: detalles || "—", inline: false },
+          {
+            name: "⏳ Expiración",
+            value: expiresAt
+              ? `<t:${Math.floor(expiresAt.getTime() / 1000)}:F> (${diasExpiracion} días)`
+              : "Sin fecha de vencimiento",
+            inline: false,
+          },
           { name: "Registrado por", value: `<@${interaction.user.id}>`, inline: true },
         )
-        .setTimestamp();
+        .setTimestamp()
+        .setFooter({
+          text: expiresAt
+            ? "⚠️ El bot avisará 48h antes de que venza el pacto"
+            : "Kingdom Guardian Pro — Panel Diplomático",
+        });
 
       await interaction.reply({ embeds: [embed] });
     }

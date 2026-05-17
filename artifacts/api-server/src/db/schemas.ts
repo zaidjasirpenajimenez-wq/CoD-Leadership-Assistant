@@ -111,6 +111,7 @@ export interface IDiplomacyPact extends Document {
   details: string;
   createdBy: string;
   createdAt: Date;
+  expiresAt?: Date;
 }
 
 const DiplomacyPactSchema = new Schema<IDiplomacyPact>(
@@ -121,6 +122,7 @@ const DiplomacyPactSchema = new Schema<IDiplomacyPact>(
     details: { type: String, default: "" },
     createdBy: { type: String, required: true },
     createdAt: { type: Date, default: Date.now },
+    expiresAt: { type: Date, default: null },
   },
   { strict: true },
 );
@@ -128,3 +130,90 @@ const DiplomacyPactSchema = new Schema<IDiplomacyPact>(
 export const DiplomacyPact: Model<IDiplomacyPact> =
   mongoose.models["DiplomacyPact"] ||
   mongoose.model<IDiplomacyPact>("DiplomacyPact", DiplomacyPactSchema);
+
+// ── KvkRecord ────────────────────────────────────────────────────────────────
+export interface IKvkRecord extends Document {
+  guildId: string;
+  seasonName: string;
+  discordId: string;
+  kills: number;
+  deaths: number;
+  powerDestroyed: number;
+  score: number;
+  updatedAt: Date;
+}
+
+const KvkRecordSchema = new Schema<IKvkRecord>(
+  {
+    guildId: { type: String, required: true, index: true },
+    seasonName: { type: String, required: true },
+    discordId: { type: String, required: true, index: true },
+    kills: { type: Number, default: 0 },
+    deaths: { type: Number, default: 0 },
+    powerDestroyed: { type: Number, default: 0 },
+    score: { type: Number, default: 0 },
+  },
+  { timestamps: true, strict: true },
+);
+
+export const KvkRecord: Model<IKvkRecord> =
+  mongoose.models["KvkRecord"] ||
+  mongoose.model<IKvkRecord>("KvkRecord", KvkRecordSchema);
+
+// ── SanctionRecord ───────────────────────────────────────────────────────────
+export interface ISanctionRecord extends Document {
+  guildId: string;
+  discordId: string;
+  type: "FALTA_GUERRA" | "AUSENCIA_EVENTO" | "PENALIZACION" | "OTRO";
+  reason: string;
+  addedBy: string;
+  createdAt: Date;
+}
+
+const SanctionRecordSchema = new Schema<ISanctionRecord>(
+  {
+    guildId: { type: String, required: true, index: true },
+    discordId: { type: String, required: true, index: true },
+    type: {
+      type: String,
+      enum: ["FALTA_GUERRA", "AUSENCIA_EVENTO", "PENALIZACION", "OTRO"],
+      required: true,
+    },
+    reason: { type: String, required: true },
+    addedBy: { type: String, required: true },
+    createdAt: { type: Date, default: Date.now },
+  },
+  { strict: true },
+);
+
+export const SanctionRecord: Model<ISanctionRecord> =
+  mongoose.models["SanctionRecord"] ||
+  mongoose.model<ISanctionRecord>("SanctionRecord", SanctionRecordSchema);
+
+// ── ScheduledTimer ───────────────────────────────────────────────────────────
+export interface IScheduledTimer extends Document {
+  guildId: string;
+  channelId: string;
+  message: string;
+  fireAt: Date;
+  fired: boolean;
+  createdBy: string;
+  repeat?: "weekly";
+}
+
+const ScheduledTimerSchema = new Schema<IScheduledTimer>(
+  {
+    guildId: { type: String, required: true, index: true },
+    channelId: { type: String, required: true },
+    message: { type: String, required: true },
+    fireAt: { type: Date, required: true, index: true },
+    fired: { type: Boolean, default: false },
+    createdBy: { type: String, required: true },
+    repeat: { type: String, enum: ["weekly"], default: null },
+  },
+  { strict: true },
+);
+
+export const ScheduledTimer: Model<IScheduledTimer> =
+  mongoose.models["ScheduledTimer"] ||
+  mongoose.model<IScheduledTimer>("ScheduledTimer", ScheduledTimerSchema);
