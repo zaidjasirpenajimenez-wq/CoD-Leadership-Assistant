@@ -8,42 +8,45 @@
   <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <script src="https://unpkg.com/lucide@latest/dist/umd/lucide.min.js"></script>
   <style>
     * { box-sizing: border-box; }
-    body { margin: 0; background: #0a0c14; font-family: 'Segoe UI', system-ui, sans-serif; }
-    ::-webkit-scrollbar { width: 6px; }
+    body { margin: 0; background: #060810; font-family: 'Segoe UI', system-ui, sans-serif; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
     ::-webkit-scrollbar-track { background: #0f1320; }
-    ::-webkit-scrollbar-thumb { background: #3b4a6b; border-radius: 3px; }
-    .glow-red { box-shadow: 0 0 20px rgba(239,68,68,0.3); }
-    .glow-blue { box-shadow: 0 0 20px rgba(59,130,246,0.3); }
-    .glow-gold { box-shadow: 0 0 20px rgba(234,179,8,0.3); }
-    .glow-green { box-shadow: 0 0 20px rgba(34,197,94,0.3); }
+    ::-webkit-scrollbar-thumb { background: #2a3a5c; border-radius: 3px; }
     .grid-bg {
-      background-image: linear-gradient(rgba(59,130,246,0.04) 1px, transparent 1px),
-                        linear-gradient(90deg, rgba(59,130,246,0.04) 1px, transparent 1px);
+      background-image:
+        linear-gradient(rgba(59,130,246,0.03) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(59,130,246,0.03) 1px, transparent 1px);
       background-size: 40px 40px;
     }
-    @keyframes pulse-glow {
-      0%, 100% { opacity: 1; }
-      50% { opacity: 0.5; }
-    }
+    @keyframes pulse-glow { 0%,100%{opacity:1} 50%{opacity:.4} }
     .pulse { animation: pulse-glow 2s infinite; }
-    @keyframes slide-in {
-      from { opacity: 0; transform: translateY(10px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
-    .slide-in { animation: slide-in 0.3s ease forwards; }
-    .heatmap-cell { transition: all 0.2s; }
-    .heatmap-cell:hover { transform: scale(1.1); z-index: 10; }
+    @keyframes slide-in { from{opacity:0;transform:translateY(8px)} to{opacity:1;transform:translateY(0)} }
+    .slide-in { animation: slide-in 0.25s ease forwards; }
+    @keyframes fade-in { from{opacity:0} to{opacity:1} }
+    .fade-in { animation: fade-in 0.2s ease forwards; }
+    .heatmap-cell { transition: transform .15s; cursor:pointer; }
+    .heatmap-cell:hover { transform: scale(1.15); z-index:10; }
+    .glow-red  { box-shadow: 0 0 18px rgba(239,68,68,.25); }
+    .glow-blue { box-shadow: 0 0 18px rgba(59,130,246,.25); }
+    .glow-gold { box-shadow: 0 0 18px rgba(234,179,8,.25); }
+    .glow-green{ box-shadow: 0 0 18px rgba(34,197,94,.25); }
+    .glow-purple{box-shadow: 0 0 18px rgba(168,85,247,.25); }
+    .tab-active { position:relative; }
+    .tab-active::after { content:''; position:absolute; bottom:-1px; left:0; right:0; height:2px; background:currentColor; border-radius:1px; }
+    .pts-bar { transition: width .6s cubic-bezier(.4,0,.2,1); }
+    tr:hover td { background: rgba(59,130,246,0.04); }
+    .rank-1 { background: linear-gradient(90deg,rgba(234,179,8,.08),transparent); }
+    .rank-2 { background: linear-gradient(90deg,rgba(156,163,175,.06),transparent); }
+    .rank-3 { background: linear-gradient(90deg,rgba(180,83,9,.06),transparent); }
   </style>
 </head>
 <body class="min-h-screen text-gray-100 grid-bg">
-
 <script type="text/babel">
-const { useState, useEffect, useCallback, useRef } = React;
-
+const { useState, useEffect, useCallback, useRef, useMemo } = React;
 const BASE = window.location.origin;
+const MASTER_KEY = "COD_MASTER_INTEL";
 
 async function apiFetch(path, headers = {}) {
   try {
@@ -53,73 +56,119 @@ async function apiFetch(path, headers = {}) {
   } catch { return null; }
 }
 
-// ── Icons (via Lucide) ───────────────────────────────────────────────────────
-function Icon({ name, size = 16, className = "" }) {
-  const ref = useRef(null);
-  useEffect(() => {
-    if (ref.current && lucide) {
-      ref.current.innerHTML = "";
-      const icon = lucide[name];
-      if (icon) {
-        const el = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-        el.setAttribute("width", size);
-        el.setAttribute("height", size);
-        el.setAttribute("viewBox", "0 0 24 24");
-        el.setAttribute("fill", "none");
-        el.setAttribute("stroke", "currentColor");
-        el.setAttribute("stroke-width", "2");
-        el.setAttribute("stroke-linecap", "round");
-        el.setAttribute("stroke-linejoin", "round");
-        el.className = className;
-        el.innerHTML = icon[2].map(([tag, attrs]) => {
-          const e = document.createElementNS("http://www.w3.org/2000/svg", tag);
-          Object.entries(attrs).forEach(([k, v]) => e.setAttribute(k, v));
-          return e.outerHTML;
-        }).join("");
-        ref.current.appendChild(el);
-      }
-    }
-  }, [name, size]);
-  return <span ref={ref} className={`inline-flex ${className}`} />;
+function masterHeaders() {
+  return { "x-master-key": MASTER_KEY };
 }
 
-// ── Stat Card ─────────────────────────────────────────────────────────────────
-function StatCard({ label, value, color = "blue", sub }) {
-  const colors = {
-    red: "border-red-600 glow-red",
-    blue: "border-blue-500 glow-blue",
-    gold: "border-yellow-500 glow-gold",
-    green: "border-green-500 glow-green",
-  };
-  const textColors = { red: "text-red-400", blue: "text-blue-400", gold: "text-yellow-400", green: "text-green-400" };
+// ── Utilities ────────────────────────────────────────────────────────────────
+function timeAgo(dateStr) {
+  if (!dateStr) return "Nunca";
+  const d = new Date(dateStr);
+  const diff = Math.floor((Date.now() - d.getTime()) / 1000);
+  if (diff < 60) return "hace " + diff + "s";
+  if (diff < 3600) return "hace " + Math.floor(diff / 60) + "min";
+  if (diff < 86400) return "hace " + Math.floor(diff / 3600) + "h";
+  return "hace " + Math.floor(diff / 86400) + "d";
+}
+
+function fmtNum(n) { return (n ?? 0).toLocaleString("es-ES"); }
+
+// ── Icon (Lucide via SVG path data) ─────────────────────────────────────────
+const ICONS = {
+  shield: "M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z",
+  sword: "M14.5 17.5L3 6V3h3l11.5 11.5-3 3zM13 6l4-4 4 4-4 4-4-4zM6 16l-4 4",
+  trophy: "M6 9H3V4h18v5h-3m-3 13H9m-2 0h10M12 9v7m-4 4h8",
+  users: "M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75M9 7a4 4 0 1 0 0-8 4 4 0 0 0 0 8z",
+  alert: "M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0zM12 9v4M12 17h.01",
+  globe: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z",
+  zap: "M13 2L3 14h9l-1 8 10-12h-9l1-8z",
+  eye: "M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8zM12 9a3 3 0 1 0 0 6 3 3 0 0 0 0-6z",
+  lock: "M19 11H5a2 2 0 0 0-2 2v7a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7a2 2 0 0 0-2-2zM7 11V7a5 5 0 0 1 10 0v4",
+  clock: "M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zM12 6v6l4 2",
+  star: "M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z",
+  skull: "M9 3a9 9 0 0 0 0 18h6a9 9 0 0 0 0-18H9zM9 17v2M15 17v2M9 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2zM15 12a1 1 0 1 0 0-2 1 1 0 0 0 0 2z",
+  map: "M1 6v16l7-4 8 4 7-4V2l-7 4-8-4-7 4zM8 2v16M16 6v16",
+  handshake: "M20.42 4.58a5.4 5.4 0 0 0-7.65 0l-.77.78-.77-.78a5.4 5.4 0 0 0-7.65 7.65l8.42 8.42 8.42-8.42a5.4 5.4 0 0 0 0-7.65z",
+  activity: "M22 12h-4l-3 9L9 3l-3 9H2",
+  refresh: "M23 4v6h-6M1 20v-6h6M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15",
+  ghost: "M9 10h.01M15 10h.01M12 2C6.48 2 2 6.48 2 12v7l3-3h14l3 3v-7c0-5.52-4.48-10-10-10z",
+  swords: "M14.5 17.5L3 6V3h3l11.5 11.5-3 3zM13 6l4-4 4 4-4 4-4-4zM6 16l-4 4M15.5 15.5l4 4",
+};
+
+function Icon({ name, size = 16, cls = "" }) {
+  const d = ICONS[name] || "";
   return (
-    <div className={`bg-gray-900/60 border ${colors[color]} rounded-xl p-5 slide-in`}>
-      <p className="text-gray-400 text-xs uppercase tracking-widest mb-1">{label}</p>
-      <p className={`text-3xl font-bold ${textColors[color]}`}>{value ?? "—"}</p>
-      {sub && <p className="text-gray-500 text-xs mt-1">{sub}</p>}
-    </div>
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none"
+      stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+      className={`inline-block shrink-0 ${cls}`}>
+      <path d={d} />
+    </svg>
   );
 }
 
-// ── Badge ─────────────────────────────────────────────────────────────────────
+// ── Badge ────────────────────────────────────────────────────────────────────
 function Badge({ type }) {
-  const styles = {
-    ATTACK:  "bg-red-900/60 text-red-300 border border-red-700",
-    DEFENSE: "bg-blue-900/60 text-blue-300 border border-blue-700",
-    ALERT:   "bg-yellow-900/60 text-yellow-300 border border-yellow-700",
-    NAP:     "bg-yellow-900/60 text-yellow-300 border border-yellow-700",
-    ALLY:    "bg-green-900/60 text-green-300 border border-green-700",
-    ENEMY:   "bg-red-900/60 text-red-300 border border-red-700",
-    BORDER:  "bg-blue-900/60 text-blue-300 border border-blue-700",
+  const map = {
+    ATTACK:       "bg-red-900/60 text-red-300 border-red-700",
+    DEFENSE:      "bg-blue-900/60 text-blue-300 border-blue-700",
+    ALERT:        "bg-yellow-900/60 text-yellow-300 border-yellow-700",
+    NAP:          "bg-yellow-900/60 text-yellow-300 border-yellow-700",
+    ALLY:         "bg-green-900/60 text-green-300 border-green-700",
+    ENEMY:        "bg-red-900/60 text-red-300 border-red-700",
+    BORDER:       "bg-blue-900/60 text-blue-300 border-blue-700",
+    FALTA_GUERRA: "bg-red-900/60 text-red-300 border-red-700",
+    AUSENCIA_EVENTO:"bg-orange-900/60 text-orange-300 border-orange-700",
+    PENALIZACION: "bg-yellow-900/60 text-yellow-300 border-yellow-700",
+    OTRO:         "bg-gray-800 text-gray-400 border-gray-600",
+  };
+  const labels = {
+    FALTA_GUERRA: "⚔️ Falta Guerra", AUSENCIA_EVENTO: "📅 Ausencia",
+    PENALIZACION: "⚠️ Penalización", OTRO: "📋 Otro",
   };
   return (
-    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold ${styles[type] ?? "bg-gray-800 text-gray-300"}`}>
-      {type}
+    <span className={`text-xs px-2 py-0.5 rounded-full font-semibold border whitespace-nowrap ${map[type] ?? "bg-gray-800 text-gray-300 border-gray-600"}`}>
+      {labels[type] ?? type}
     </span>
   );
 }
 
-// ── Heatmap ───────────────────────────────────────────────────────────────────
+// ── Stat Card ────────────────────────────────────────────────────────────────
+function StatCard({ label, value, color = "blue", sub, icon }) {
+  const border = { red:"border-red-600/50 glow-red", blue:"border-blue-500/50 glow-blue", gold:"border-yellow-500/50 glow-gold", green:"border-green-500/50 glow-green", purple:"border-purple-500/50 glow-purple" };
+  const text   = { red:"text-red-400", blue:"text-blue-400", gold:"text-yellow-400", green:"text-green-400", purple:"text-purple-400" };
+  return (
+    <div className={`bg-gray-900/50 border ${border[color] ?? border.blue} rounded-xl p-5 slide-in backdrop-blur-sm`}>
+      <div className="flex items-center justify-between mb-2">
+        <p className="text-gray-500 text-xs uppercase tracking-widest">{label}</p>
+        {icon && <span className="text-lg">{icon}</span>}
+      </div>
+      <p className={`text-3xl font-bold ${text[color] ?? text.blue}`}>{value ?? "—"}</p>
+      {sub && <p className="text-gray-600 text-xs mt-1">{sub}</p>}
+    </div>
+  );
+}
+
+// ── Spinner ──────────────────────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <div className="text-center py-16 text-gray-600">
+      <div className="text-4xl mb-3 pulse">⏳</div>
+      <p className="text-sm">Cargando datos...</p>
+    </div>
+  );
+}
+
+// ── Empty State ───────────────────────────────────────────────────────────────
+function Empty({ icon = "📡", msg }) {
+  return (
+    <div className="text-center py-12 text-gray-600">
+      <div className="text-4xl mb-3">{icon}</div>
+      <p className="text-sm">{msg}</p>
+    </div>
+  );
+}
+
+// ── Heatmap ──────────────────────────────────────────────────────────────────
 function ConflictHeatmap({ intel }) {
   const grid = 10;
   const cells = {};
@@ -133,199 +182,405 @@ function ConflictHeatmap({ intel }) {
     }
   });
   const maxVal = Math.max(...Object.values(cells), 1);
-
   return (
-    <div className="bg-gray-900/60 border border-gray-700 rounded-xl p-4">
-      <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">
+    <div className="bg-gray-900/50 border border-gray-800 rounded-xl p-5">
+      <h3 className="text-sm font-semibold text-gray-300 mb-4 flex items-center gap-2">
         <span className="w-2 h-2 bg-red-500 rounded-full pulse" />
         Mapa de Calor — Zonas de Conflicto
       </h3>
       <div className="grid gap-1" style={{ gridTemplateColumns: `repeat(${grid}, 1fr)` }}>
         {Array.from({ length: grid * grid }, (_, i) => {
-          const x = i % grid;
-          const y = Math.floor(i / grid);
+          const x = i % grid, y = Math.floor(i / grid);
           const count = cells[`${x},${y}`] || 0;
           const intensity = count / maxVal;
-          const alpha = Math.round(intensity * 255).toString(16).padStart(2, "0");
-          const bg = count > 0 ? `#ef4444${alpha}` : "#1f2937";
+          const alpha = Math.round(intensity * 200).toString(16).padStart(2, "0");
+          const bg = count > 0 ? `#ef4444${alpha}` : "#111827";
           return (
-            <div
-              key={i}
-              className="heatmap-cell rounded aspect-square cursor-pointer"
+            <div key={i} className="heatmap-cell rounded aspect-square"
               style={{ background: bg, minWidth: 0 }}
-              title={count > 0 ? `Zona (${x * 100}:${y * 100}) — ${count} evento${count > 1 ? "s" : ""}` : ""}
-            />
+              title={count > 0 ? `Zona (${x*100}:${y*100}) — ${count} evento${count>1?"s":""}` : ""} />
           );
         })}
       </div>
-      <div className="flex items-center gap-2 mt-3 text-xs text-gray-500">
-        <div className="w-3 h-3 rounded bg-gray-700" /> Sin actividad
-        <div className="w-3 h-3 rounded bg-red-700/50" /> Media
-        <div className="w-3 h-3 rounded bg-red-500" /> Alta
+      <div className="flex items-center gap-3 mt-4 text-xs text-gray-600">
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-gray-800 inline-block"/>Sin actividad</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-800/60 inline-block"/>Media</span>
+        <span className="flex items-center gap-1"><span className="w-3 h-3 rounded bg-red-500 inline-block"/>Alta</span>
       </div>
+    </div>
+  );
+}
+
+// ── Leaderboard Table ─────────────────────────────────────────────────────────
+function LeaderboardTable({ members, scoreKey = "weeklyPoints", label = "Pts Semana" }) {
+  const max = members[0]?.[scoreKey] || 1;
+  const medals = ["🥇", "🥈", "🥉"];
+  const rowCls = ["rank-1","rank-2","rank-3"];
+  if (!members.length) return <Empty icon="🏆" msg="No hay datos de ranking aún" />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <th className="text-left py-2 pr-3 w-8">#</th>
+            <th className="text-left py-2 pr-3">Soldado</th>
+            <th className="text-right py-2 pr-3">{label}</th>
+            <th className="text-right py-2 pr-3 hidden sm:table-cell">Total</th>
+            <th className="text-right py-2 hidden sm:table-cell">Eventos</th>
+            <th className="py-2 pl-4 w-32 hidden md:table-cell">Actividad</th>
+          </tr>
+        </thead>
+        <tbody>
+          {members.map((m, i) => (
+            <tr key={i} className={`border-b border-gray-900/60 transition ${rowCls[i] ?? ""}`}>
+              <td className="py-2.5 pr-3 text-lg">{medals[i] ?? <span className="text-gray-600 text-xs font-mono">{i+1}</span>}</td>
+              <td className="py-2.5 pr-3">
+                <span className="font-semibold text-white">{m.ign || "Soldado"}</span>
+                <span className="text-gray-600 text-xs ml-2 font-mono hidden sm:inline">#{m.discordId?.slice(-4)}</span>
+              </td>
+              <td className="py-2.5 pr-3 text-right font-bold text-blue-400">{fmtNum(m[scoreKey])}</td>
+              <td className="py-2.5 pr-3 text-right text-gray-500 hidden sm:table-cell">{fmtNum(m.totalPoints)}</td>
+              <td className="py-2.5 text-right text-gray-500 hidden sm:table-cell">{m.eventsAttended ?? 0}</td>
+              <td className="py-2.5 pl-4 hidden md:table-cell">
+                <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden w-full">
+                  <div className="pts-bar h-full bg-gradient-to-r from-blue-600 to-blue-400 rounded-full"
+                    style={{ width: `${Math.round((m[scoreKey] / max) * 100)}%` }} />
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── KVK Table ─────────────────────────────────────────────────────────────────
+function KvkTable({ records, guildMap }) {
+  const medals = ["🥇","🥈","🥉"];
+  if (!records.length) return <Empty icon="⚔️" msg="Sin registros KVK aún" />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <th className="text-left py-2 pr-2 w-8">#</th>
+            <th className="text-left py-2 pr-3">Soldado</th>
+            <th className="text-left py-2 pr-3 hidden sm:table-cell">Alianza</th>
+            <th className="text-left py-2 pr-3 hidden md:table-cell">Temporada</th>
+            <th className="text-right py-2 pr-3">⚔️ Kills</th>
+            <th className="text-right py-2 pr-3 hidden sm:table-cell">💀 Muertes</th>
+            <th className="text-right py-2 pr-3 hidden md:table-cell">💥 Poder</th>
+            <th className="text-right py-2">🏆 Score</th>
+          </tr>
+        </thead>
+        <tbody>
+          {records.map((r, i) => (
+            <tr key={i} className={`border-b border-gray-900/60 transition ${["rank-1","rank-2","rank-3"][i] ?? ""}`}>
+              <td className="py-2.5 pr-2 text-lg">{medals[i] ?? <span className="text-gray-600 text-xs font-mono">{i+1}</span>}</td>
+              <td className="py-2.5 pr-3">
+                <span className="font-semibold text-white font-mono text-xs">{r.discordId?.slice(-8)}</span>
+              </td>
+              <td className="py-2.5 pr-3 text-gray-400 hidden sm:table-cell">{guildMap?.[r.guildId] ?? "—"}</td>
+              <td className="py-2.5 pr-3 text-gray-500 hidden md:table-cell">{r.seasonName}</td>
+              <td className="py-2.5 pr-3 text-right text-red-400 font-semibold">{fmtNum(r.kills)}</td>
+              <td className="py-2.5 pr-3 text-right text-gray-500 hidden sm:table-cell">{fmtNum(r.deaths)}</td>
+              <td className="py-2.5 pr-3 text-right text-purple-400 hidden md:table-cell">{fmtNum(r.powerDestroyed)}</td>
+              <td className="py-2.5 text-right text-yellow-400 font-bold">{fmtNum(Math.round(r.score))}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Sanctions Table ───────────────────────────────────────────────────────────
+function SanctionsTable({ sanctions, guildMap }) {
+  if (!sanctions.length) return <Empty icon="📋" msg="Sin sanciones registradas" />;
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <th className="text-left py-2 pr-3">Tipo</th>
+            <th className="text-left py-2 pr-3">Soldado</th>
+            <th className="text-left py-2 pr-3 hidden md:table-cell">Alianza</th>
+            <th className="text-left py-2 pr-3">Motivo</th>
+            <th className="text-right py-2">Fecha</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sanctions.map((s, i) => (
+            <tr key={i} className="border-b border-gray-900/60 transition">
+              <td className="py-2.5 pr-3"><Badge type={s.type} /></td>
+              <td className="py-2.5 pr-3 font-mono text-xs text-gray-400">{s.discordId?.slice(-8)}</td>
+              <td className="py-2.5 pr-3 text-gray-500 hidden md:table-cell">{guildMap?.[s.guildId] ?? "—"}</td>
+              <td className="py-2.5 pr-3 text-gray-300 max-w-[200px] truncate" title={s.reason}>{s.reason}</td>
+              <td className="py-2.5 text-right text-gray-600 text-xs whitespace-nowrap">{timeAgo(s.createdAt)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Inactivity Table ──────────────────────────────────────────────────────────
+function InactivityTable({ inactive, guildMap }) {
+  if (!inactive.length) return (
+    <div className="text-center py-12">
+      <div className="text-4xl mb-3">✅</div>
+      <p className="text-green-400 font-semibold">Sin inactivos detectados</p>
+      <p className="text-gray-600 text-sm mt-1">Todos los miembros tienen actividad reciente</p>
+    </div>
+  );
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full text-sm">
+        <thead>
+          <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
+            <th className="text-left py-2 pr-3">IGN</th>
+            <th className="text-left py-2 pr-3 hidden sm:table-cell">Alianza</th>
+            <th className="text-right py-2 pr-3">Pts Semana</th>
+            <th className="text-right py-2">Última Actividad</th>
+          </tr>
+        </thead>
+        <tbody>
+          {inactive.map((m, i) => {
+            const daysAgo = Math.floor((Date.now() - new Date(m.lastActivity).getTime()) / 86400000);
+            const severity = daysAgo > 14 ? "text-red-400" : daysAgo > 7 ? "text-orange-400" : "text-yellow-400";
+            return (
+              <tr key={i} className="border-b border-gray-900/60 transition">
+                <td className="py-2.5 pr-3">
+                  <span className="text-white font-medium">{m.ign || "Sin IGN"}</span>
+                  <span className="text-gray-600 text-xs ml-2 font-mono hidden sm:inline">#{m.discordId?.slice(-4)}</span>
+                </td>
+                <td className="py-2.5 pr-3 text-gray-500 hidden sm:table-cell">{guildMap?.[m.guildId] ?? "—"}</td>
+                <td className="py-2.5 pr-3 text-right text-gray-500">{m.weeklyPoints ?? 0}</td>
+                <td className={`py-2.5 text-right font-semibold ${severity}`}>{timeAgo(m.lastActivity)}</td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+// ── Tabs Component ────────────────────────────────────────────────────────────
+function Tabs({ tabs, active, onChange, color = "blue" }) {
+  const activeColor = { blue:"text-blue-400", red:"text-red-400" };
+  return (
+    <div className="flex gap-0.5 mb-5 bg-gray-900/60 p-1 rounded-xl border border-gray-800/60 overflow-x-auto">
+      {tabs.map(t => (
+        <button key={t.id} onClick={() => onChange(t.id)}
+          className={`flex-shrink-0 flex items-center gap-1.5 text-xs py-2 px-3 rounded-lg transition-all font-medium whitespace-nowrap ${
+            active === t.id
+              ? (color === "red" ? "bg-red-900/50 text-red-200 border border-red-800" : "bg-blue-900/40 text-blue-200 border border-blue-800")
+              : "text-gray-500 hover:text-gray-300 hover:bg-gray-800/40"
+          }`}>
+          {t.icon && <span>{t.icon}</span>}
+          {t.label}
+        </button>
+      ))}
     </div>
   );
 }
 
 // ── Master Intel Panel ────────────────────────────────────────────────────────
 function MasterIntelPanel({ onLock }) {
-  const [intel, setIntel] = useState([]);
-  const [diplomacy, setDiplomacy] = useState({ pacts: [], guildMap: {} });
-  const [members, setMembers] = useState([]);
+  const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
-  const [tab, setTab] = useState("intel");
+  const [data, setData] = useState({
+    overview: null, intel: [], diplomacy: { pacts: [], guildMap: {} },
+    members: [], sanctions: { sanctions: [], guildMap: {} },
+    kvk: { records: [], guildMap: {} }, inactivity: { inactive: [], guildMap: {} },
+  });
 
   useEffect(() => {
-    const headers = { "x-master-key": "COD_MASTER_INTEL" };
+    const h = masterHeaders();
     Promise.all([
-      apiFetch("/api/dashboard/intel", headers),
-      apiFetch("/api/dashboard/diplomacy", headers),
-      apiFetch("/api/dashboard/members", headers),
-    ]).then(([i, d, m]) => {
-      setIntel(i?.intel ?? []);
-      setDiplomacy(d ?? { pacts: [], guildMap: {} });
-      setMembers(m?.members ?? []);
+      apiFetch("/api/dashboard/overview", h),
+      apiFetch("/api/dashboard/intel", h),
+      apiFetch("/api/dashboard/diplomacy", h),
+      apiFetch("/api/dashboard/members", h),
+      apiFetch("/api/dashboard/sanctions", h),
+      apiFetch("/api/dashboard/kvk", h),
+      apiFetch("/api/dashboard/inactivity", h),
+    ]).then(([overview, intelRes, dipRes, membersRes, sanctRes, kvkRes, inactRes]) => {
+      setData({
+        overview,
+        intel: intelRes?.intel ?? [],
+        diplomacy: dipRes ?? { pacts: [], guildMap: {} },
+        members: membersRes?.members ?? [],
+        sanctions: sanctRes ?? { sanctions: [], guildMap: {} },
+        kvk: kvkRes ?? { records: [], guildMap: {} },
+        inactivity: inactRes ?? { inactive: [], guildMap: {} },
+      });
       setLoading(false);
     });
   }, []);
 
-  const tabs = [
-    { id: "intel", label: "⚔️ Intel Global" },
-    { id: "heatmap", label: "🌡️ Mapa de Calor" },
-    { id: "diplomacy", label: "🤝 Diplomacia" },
-    { id: "members", label: "👥 Roster" },
+  const TABS = [
+    { id:"overview",   icon:"📊", label:"Resumen" },
+    { id:"leaderboard",icon:"🏆", label:"Ranking" },
+    { id:"kvk",        icon:"⚔️", label:"KVK" },
+    { id:"sanctions",  icon:"⚠️", label:"Sanciones" },
+    { id:"inactivity", icon:"👻", label:"Inactividad" },
+    { id:"intel",      icon:"🛰️", label:"Intel Global" },
+    { id:"heatmap",    icon:"🌡️", label:"Mapa de Calor" },
+    { id:"diplomacy",  icon:"🤝", label:"Diplomacia" },
+    { id:"roster",     icon:"👥", label:"Roster" },
   ];
 
-  const attackCount = intel.filter(i => i.actionType === "ATTACK").length;
-  const alertCount = intel.filter(i => i.actionType === "ALERT").length;
+  const { overview, intel, diplomacy, members, sanctions, kvk, inactivity } = data;
+  const weeklyTop = useMemo(() =>
+    [...members].sort((a,b) => (b.weeklyPoints||0)-(a.weeklyPoints||0)).slice(0,20), [members]);
+  const totalTop = useMemo(() =>
+    [...members].sort((a,b) => (b.totalPoints||0)-(a.totalPoints||0)).slice(0,20), [members]);
 
   return (
     <div className="slide-in">
+      {/* Header */}
       <div className="flex items-center justify-between mb-6">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-red-900/50 border border-red-600 rounded-lg flex items-center justify-center">
-            <span className="text-red-400 text-xl">👁️</span>
+          <div className="w-10 h-10 bg-red-900/50 border border-red-700 rounded-xl flex items-center justify-center">
+            <span className="text-xl">👁️</span>
           </div>
           <div>
-            <h2 className="text-xl font-bold text-red-400">RADAR DE INTELIGENCIA</h2>
-            <p className="text-xs text-gray-500">Acceso Maestro — Vista Global Multi-Servidor</p>
+            <h2 className="text-xl font-bold text-red-400">RADAR DE INTELIGENCIA MAESTRA</h2>
+            <p className="text-xs text-gray-600">Acceso maestro — Vista global multi-servidor</p>
           </div>
         </div>
-        <button
-          onClick={onLock}
-          className="text-xs text-gray-500 hover:text-red-400 border border-gray-700 hover:border-red-700 px-3 py-1.5 rounded-lg transition"
-        >
-          🔒 Bloquear
+        <button onClick={onLock}
+          className="text-xs text-gray-600 hover:text-red-400 border border-gray-800 hover:border-red-800 px-3 py-1.5 rounded-lg transition flex items-center gap-1.5">
+          <Icon name="lock" size={12} /> Bloquear
         </button>
       </div>
 
-      <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-        <StatCard label="Intel Total" value={intel.length} color="red" />
-        <StatCard label="Ataques" value={attackCount} color="red" />
-        <StatCard label="Alertas" value={alertCount} color="gold" />
-        <StatCard label="Pactos Diplomáticos" value={diplomacy.pacts.length} color="blue" />
-      </div>
+      <Tabs tabs={TABS} active={tab} onChange={setTab} color="red" />
 
-      <div className="flex gap-1 mb-4 bg-gray-900/50 p-1 rounded-lg border border-gray-800">
-        {tabs.map(t => (
-          <button
-            key={t.id}
-            onClick={() => setTab(t.id)}
-            className={`flex-1 text-xs py-2 px-3 rounded-md transition font-medium ${
-              tab === t.id
-                ? "bg-red-800/60 text-red-200 border border-red-700"
-                : "text-gray-500 hover:text-gray-300"
-            }`}
-          >
-            {t.label}
-          </button>
-        ))}
-      </div>
+      {loading ? <Spinner /> : (
+        <div className="fade-in">
+          {/* OVERVIEW */}
+          {tab === "overview" && (
+            <div>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+                <StatCard label="Total Soldados" value={fmtNum(overview?.totalMembers)} color="blue" icon="👥" />
+                <StatCard label="Activos Esta Semana" value={fmtNum(overview?.activeMembers)} color="green"
+                  sub={overview?.totalMembers ? `${Math.round((overview.activeMembers/overview.totalMembers)*100)}% de participación` : ""} icon="⚡" />
+                <StatCard label="Inactivos +7d" value={fmtNum(overview?.inactiveMembers)} color="red" icon="👻" />
+                <StatCard label="Sanciones Este Mes" value={fmtNum(overview?.sanctionsMonth)} color="gold" icon="⚠️" />
+              </div>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
+                <StatCard label="Sanciones Totales" value={fmtNum(overview?.totalSanctions)} color="red" icon="📋" />
+                <StatCard label="Pactos Diplomáticos" value={fmtNum(overview?.totalPacts)} color="blue" icon="🤝" />
+                <StatCard label="Registros Intel" value={fmtNum(overview?.totalIntel)} color="purple" icon="🛰️" />
+              </div>
+            </div>
+          )}
 
-      {loading ? (
-        <div className="text-center py-16 text-gray-600">
-          <div className="text-4xl mb-3 pulse">⏳</div>
-          <p>Cargando datos de inteligencia...</p>
-        </div>
-      ) : (
-        <>
+          {/* RANKING */}
+          {tab === "leaderboard" && (
+            <div>
+              <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-900/40 p-1 rounded-lg border border-gray-800">
+                {["weekly","total"].map(k => (
+                  <button key={k} id={`lb-${k}`} onClick={() => {
+                    document.querySelectorAll(".lb-btn").forEach(el => el.classList.remove("bg-blue-900/40","text-blue-200","border","border-blue-800"));
+                    document.getElementById(`lb-${k}`).classList.add("bg-blue-900/40","text-blue-200","border","border-blue-800");
+                    document.getElementById("lb-weekly").style.display = k==="weekly"?"block":"none";
+                    document.getElementById("lb-total").style.display = k==="total"?"block":"none";
+                  }} className={`lb-btn text-xs py-2 px-3 rounded-md font-medium transition ${k==="weekly"?"bg-blue-900/40 text-blue-200 border border-blue-800":"text-gray-500"}`}>
+                    {k==="weekly" ? "⭐ Semanal" : "🏆 Histórico"}
+                  </button>
+                ))}
+              </div>
+              <div id="lb-weekly"><LeaderboardTable members={weeklyTop} scoreKey="weeklyPoints" label="Pts Semana" /></div>
+              <div id="lb-total" style={{display:"none"}}><LeaderboardTable members={totalTop} scoreKey="totalPoints" label="Pts Total" /></div>
+            </div>
+          )}
+
+          {/* KVK */}
+          {tab === "kvk" && <KvkTable records={kvk.records} guildMap={kvk.guildMap} />}
+
+          {/* SANCIONES */}
+          {tab === "sanctions" && <SanctionsTable sanctions={sanctions.sanctions} guildMap={sanctions.guildMap} />}
+
+          {/* INACTIVIDAD */}
+          {tab === "inactivity" && <InactivityTable inactive={inactivity.inactive} guildMap={inactivity.guildMap} />}
+
+          {/* INTEL GLOBAL */}
           {tab === "intel" && (
-            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-              {intel.length === 0 && (
-                <div className="text-center py-10 text-gray-600">
-                  <div className="text-3xl mb-2">📡</div>
-                  <p>Sin datos de inteligencia aún</p>
-                </div>
-              )}
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {!intel.length && <Empty icon="📡" msg="Sin datos de inteligencia aún" />}
               {intel.map((item, i) => (
-                <div key={i} className="bg-gray-900/60 border border-gray-800 rounded-lg p-3 flex items-start gap-3 hover:border-gray-700 transition">
+                <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-start gap-3 hover:border-gray-700 transition">
                   <Badge type={item.actionType} />
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="text-xs font-mono text-yellow-400">{item.coords}</span>
-                      <span className="text-xs text-gray-600">{new Date(item.timestamp).toLocaleString("es-ES")}</span>
+                      <span className="text-xs text-gray-600 shrink-0">{new Date(item.timestamp).toLocaleString("es-ES")}</span>
                     </div>
                     <p className="text-sm text-gray-300 mt-0.5 truncate">{item.details}</p>
-                    <p className="text-xs text-gray-600 mt-0.5">Alliance: <span className="text-gray-400">{item.allianceTag}</span> · Guild: {item.sourceGuildId}</p>
+                    <p className="text-xs text-gray-600 mt-0.5">Alianza: <span className="text-gray-400">{item.allianceTag}</span></p>
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {tab === "heatmap" && (
-            <ConflictHeatmap intel={intel} />
-          )}
+          {/* HEATMAP */}
+          {tab === "heatmap" && <ConflictHeatmap intel={intel} />}
 
+          {/* DIPLOMACIA */}
           {tab === "diplomacy" && (
-            <div className="space-y-2 max-h-96 overflow-y-auto pr-1">
-              {diplomacy.pacts.length === 0 && (
-                <div className="text-center py-10 text-gray-600">
-                  <div className="text-3xl mb-2">🤝</div>
-                  <p>Sin pactos diplomáticos registrados</p>
-                </div>
-              )}
+            <div className="space-y-2 max-h-[520px] overflow-y-auto pr-1">
+              {!diplomacy.pacts.length && <Empty icon="🤝" msg="Sin pactos diplomáticos registrados" />}
               {diplomacy.pacts.map((pact, i) => (
-                <div key={i} className="bg-gray-900/60 border border-gray-800 rounded-lg p-3 flex items-center gap-3 hover:border-gray-700 transition">
+                <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center gap-3 hover:border-gray-700 transition">
                   <Badge type={pact.pactType} />
-                  <div className="flex-1">
-                    <div className="flex items-center justify-between">
+                  <div className="flex-1 min-w-0">
+                    <div className="flex items-center justify-between gap-2">
                       <span className="font-semibold text-sm text-white">{pact.targetAlliance}</span>
-                      <span className="text-xs text-gray-600">{diplomacy.guildMap[pact.guildId] ?? pact.guildId}</span>
+                      <span className="text-xs text-gray-600 shrink-0">{diplomacy.guildMap[pact.guildId] ?? pact.guildId}</span>
                     </div>
-                    {pact.details && <p className="text-xs text-gray-400 mt-0.5">{pact.details}</p>}
+                    {pact.details && <p className="text-xs text-gray-500 mt-0.5">{pact.details}</p>}
+                    {pact.expiresAt && (
+                      <p className="text-xs text-orange-400 mt-0.5">⏳ Vence: {new Date(pact.expiresAt).toLocaleDateString("es-ES")}</p>
+                    )}
                   </div>
                 </div>
               ))}
             </div>
           )}
 
-          {tab === "members" && (
-            <div className="overflow-x-auto">
+          {/* ROSTER */}
+          {tab === "roster" && (
+            <div className="overflow-x-auto max-h-[520px] overflow-y-auto">
               <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-gray-800 text-xs text-gray-500 uppercase">
-                    <th className="text-left py-2 pr-4">IGN</th>
-                    <th className="text-left py-2 pr-4">Character ID</th>
-                    <th className="text-left py-2 pr-4">Alliance</th>
-                    <th className="text-right py-2 pr-4">Power</th>
+                <thead className="sticky top-0 bg-gray-950/90 backdrop-blur-sm">
+                  <tr className="text-xs text-gray-500 uppercase border-b border-gray-800">
+                    <th className="text-left py-2 pr-3">IGN</th>
+                    <th className="text-right py-2 pr-3 hidden sm:table-cell">Poder</th>
+                    <th className="text-right py-2 pr-3">Pts Semana</th>
+                    <th className="text-right py-2 pr-3 hidden md:table-cell">Pts Total</th>
                     <th className="text-center py-2">Warns</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {members.length === 0 && (
-                    <tr><td colSpan="5" className="text-center py-8 text-gray-600">Sin miembros registrados</td></tr>
-                  )}
+                  {!members.length && <tr><td colSpan="5"><Empty icon="👥" msg="Sin miembros registrados" /></td></tr>}
                   {members.map((m, i) => (
-                    <tr key={i} className="border-b border-gray-900 hover:bg-gray-800/30 transition">
-                      <td className="py-2 pr-4 font-medium text-white">{m.ign}</td>
-                      <td className="py-2 pr-4 font-mono text-xs text-gray-400">{m.characterId}</td>
-                      <td className="py-2 pr-4 text-gray-300">{m.alliance || "—"}</td>
-                      <td className="py-2 pr-4 text-right text-blue-400">{m.power ? m.power.toLocaleString() : "—"}</td>
+                    <tr key={i} className="border-b border-gray-900/60 transition">
+                      <td className="py-2 pr-3">
+                        <span className="font-medium text-white">{m.ign || "—"}</span>
+                        <span className="text-gray-600 text-xs ml-2 font-mono">#{m.discordId?.slice(-4)}</span>
+                      </td>
+                      <td className="py-2 pr-3 text-right text-blue-400 hidden sm:table-cell">{m.power ? fmtNum(m.power) : "—"}</td>
+                      <td className="py-2 pr-3 text-right text-yellow-400 font-semibold">{fmtNum(m.weeklyPoints)}</td>
+                      <td className="py-2 pr-3 text-right text-gray-500 hidden md:table-cell">{fmtNum(m.totalPoints)}</td>
                       <td className="py-2 text-center">
-                        <span className={`text-xs font-bold ${m.warns > 0 ? "text-red-400" : "text-gray-600"}`}>
-                          {m.warns}/3
-                        </span>
+                        <span className={`text-xs font-bold ${m.warns > 0 ? "text-red-400" : "text-gray-700"}`}>{m.warns}/3</span>
                       </td>
                     </tr>
                   ))}
@@ -333,88 +588,122 @@ function MasterIntelPanel({ onLock }) {
               </table>
             </div>
           )}
-        </>
+        </div>
       )}
     </div>
   );
 }
 
 // ── Public Alliance Panel ─────────────────────────────────────────────────────
-function PublicPanel({ guilds, health }) {
+function PublicPanel({ guilds }) {
   const [selected, setSelected] = useState(null);
   const [guildData, setGuildData] = useState(null);
+  const [leaderboard, setLeaderboard] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [tab, setTab] = useState("stats");
 
   useEffect(() => {
     if (!selected) return;
     setLoading(true);
     setGuildData(null);
-    apiFetch(`/api/dashboard/guilds/${selected}`).then(d => {
-      setGuildData(d);
+    setLeaderboard(null);
+    setTab("stats");
+    Promise.all([
+      apiFetch(`/api/dashboard/guilds/${selected}`),
+      apiFetch(`/api/dashboard/guilds/${selected}/leaderboard`),
+    ]).then(([gd, lb]) => {
+      setGuildData(gd);
+      setLeaderboard(lb);
       setLoading(false);
     });
   }, [selected]);
 
-  const pactColors = { NAP: "text-yellow-400", ALLY: "text-green-400", ENEMY: "text-red-400", BORDER: "text-blue-400" };
+  const TABS = [
+    { id:"stats",      icon:"📊", label:"Estadísticas" },
+    { id:"leaderboard",icon:"🏆", label:"Ranking Semanal" },
+    { id:"alltime",    icon:"⭐", label:"Hall of Fame" },
+    { id:"diplomacy",  icon:"🛰️", label:"Diplomacia" },
+  ];
 
   return (
     <div className="slide-in">
       <div className="mb-6">
         <h2 className="text-lg font-bold text-gray-200 mb-1">Seleccionar Servidor</h2>
-        <p className="text-xs text-gray-500">Selecciona una alianza para ver sus estadísticas públicas</p>
+        <p className="text-xs text-gray-600">Selecciona una alianza para ver sus estadísticas y ranking</p>
       </div>
 
       {guilds.length === 0 ? (
         <div className="text-center py-16 text-gray-600">
           <div className="text-4xl mb-3">🏰</div>
           <p>No hay servidores registrados aún</p>
-          <p className="text-xs mt-2">Configura el bot con <code className="bg-gray-800 px-1 rounded">/setup alliance</code></p>
+          <p className="text-xs mt-2">Configura el bot con <code className="bg-gray-800 px-1.5 py-0.5 rounded text-gray-400">/setup alliance</code></p>
         </div>
       ) : (
         <>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-6">
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-3 mb-6">
             {guilds.map(g => (
-              <button
-                key={g.guildId}
-                onClick={() => setSelected(g.guildId)}
+              <button key={g.guildId} onClick={() => setSelected(g.guildId)}
                 className={`p-4 rounded-xl border text-left transition ${
                   selected === g.guildId
                     ? "border-blue-500 bg-blue-900/20 glow-blue"
-                    : "border-gray-700 bg-gray-900/40 hover:border-gray-600"
-                }`}
-              >
+                    : "border-gray-800 bg-gray-900/40 hover:border-gray-700"
+                }`}>
                 <p className="font-bold text-white text-lg">[{g.allianceTag}]</p>
-                <p className="text-xs text-gray-500 mt-1 truncate">ID: {g.guildId}</p>
+                <p className="text-xs text-gray-600 mt-1 truncate">ID: {g.guildId}</p>
               </button>
             ))}
           </div>
 
-          {loading && (
-            <div className="text-center py-10 text-gray-600">
-              <div className="pulse text-3xl mb-2">⏳</div>
-              <p>Cargando datos...</p>
-            </div>
-          )}
+          {loading && <Spinner />}
 
           {guildData && !loading && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 slide-in">
-              <StatCard label="Miembros Registrados" value={guildData.memberCount} color="blue" />
-              <StatCard label="Con Advertencias" value={guildData.warnedCount} color="red" sub="Jugadores con warns activos" />
-              <StatCard label="Pactos Diplomáticos" value={guildData.pacts?.length ?? 0} color="gold" />
-              <StatCard label="Tag de Alianza" value={`[${guildData.config?.allianceTag}]`} color="green" />
+            <div className="slide-in">
+              <Tabs tabs={TABS} active={tab} onChange={setTab} color="blue" />
 
-              {guildData.pacts?.length > 0 && (
-                <div className="md:col-span-2 bg-gray-900/60 border border-gray-800 rounded-xl p-4">
-                  <h3 className="text-sm font-semibold text-gray-300 mb-3">🛰️ Radar Diplomático</h3>
-                  <div className="space-y-2">
-                    {guildData.pacts.map((p, i) => (
-                      <div key={i} className="flex items-center gap-3 py-1.5 border-b border-gray-800">
-                        <Badge type={p.pactType} />
-                        <span className="font-semibold text-sm text-white">{p.targetAlliance}</span>
-                        {p.details && <span className="text-xs text-gray-500">— {p.details}</span>}
-                      </div>
-                    ))}
+              {tab === "stats" && (
+                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                  <StatCard label="Miembros Registrados" value={fmtNum(guildData.memberCount)} color="blue" icon="👥" />
+                  <StatCard label="Activos Esta Semana" value={fmtNum(guildData.activeCount)} color="green"
+                    sub={guildData.memberCount ? `${Math.round((guildData.activeCount/guildData.memberCount)*100)}% participación` : ""} icon="⚡" />
+                  <StatCard label="Con Advertencias" value={fmtNum(guildData.warnedCount)} color="red" icon="⚠️" />
+                  <StatCard label="Pactos Diplomáticos" value={fmtNum(guildData.pacts?.length)} color="gold" icon="🤝" />
+                </div>
+              )}
+
+              {tab === "leaderboard" && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <div className="w-2 h-2 bg-blue-500 rounded-full pulse" />
+                    <span className="text-sm text-gray-400">Top 20 soldados más activos de la semana</span>
                   </div>
+                  <LeaderboardTable members={leaderboard?.weekly ?? []} scoreKey="weeklyPoints" label="Pts Semana" />
+                </div>
+              )}
+
+              {tab === "alltime" && (
+                <div>
+                  <div className="flex items-center gap-2 mb-4">
+                    <span className="text-sm text-gray-400">🏆 Ranking histórico — Hall of Fame de la alianza</span>
+                  </div>
+                  <LeaderboardTable members={leaderboard?.allTime ?? []} scoreKey="totalPoints" label="Pts Total" />
+                </div>
+              )}
+
+              {tab === "diplomacy" && (
+                <div className="space-y-2">
+                  {!guildData.pacts?.length && <Empty icon="🤝" msg="Sin pactos diplomáticos registrados" />}
+                  {guildData.pacts?.map((p, i) => (
+                    <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg p-3 flex items-center gap-3 hover:border-gray-700 transition">
+                      <Badge type={p.pactType} />
+                      <div className="flex-1">
+                        <span className="font-semibold text-sm text-white">{p.targetAlliance}</span>
+                        {p.details && <span className="text-xs text-gray-500 ml-2">— {p.details}</span>}
+                        {p.expiresAt && (
+                          <div className="text-xs text-orange-400 mt-0.5">⏳ Vence: {new Date(p.expiresAt).toLocaleDateString("es-ES")}</div>
+                        )}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>
@@ -429,49 +718,28 @@ function PublicPanel({ guilds, health }) {
 function MasterKeyModal({ onSubmit, onClose }) {
   const [val, setVal] = useState("");
   const [err, setErr] = useState(false);
-
   const submit = () => {
-    if (val === "COD_MASTER_INTEL") {
-      onSubmit();
-    } else {
-      setErr(true);
-      setTimeout(() => setErr(false), 1500);
-    }
+    if (val === MASTER_KEY) { onSubmit(); }
+    else { setErr(true); setTimeout(() => setErr(false), 1500); }
   };
-
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50" onClick={onClose}>
-      <div
-        className="bg-gray-900 border border-red-800 rounded-2xl p-8 w-full max-w-sm shadow-2xl slide-in"
-        onClick={e => e.stopPropagation()}
-      >
+      <div className="bg-gray-900 border border-red-900 rounded-2xl p-8 w-full max-w-sm shadow-2xl slide-in" onClick={e => e.stopPropagation()}>
         <div className="text-center mb-6">
           <div className="text-5xl mb-3">🔐</div>
           <h2 className="text-xl font-bold text-red-400">Acceso Restringido</h2>
-          <p className="text-xs text-gray-500 mt-1">Introduce la clave de acceso maestra</p>
+          <p className="text-xs text-gray-600 mt-1">Introduce la clave de acceso maestra</p>
         </div>
-        <input
-          type="password"
-          value={val}
-          onChange={e => setVal(e.target.value)}
+        <input type="password" value={val} onChange={e => setVal(e.target.value)}
           onKeyDown={e => e.key === "Enter" && submit()}
           placeholder="Clave de acceso..."
-          className={`w-full bg-gray-800 border rounded-lg px-4 py-3 text-sm text-white placeholder-gray-600 outline-none focus:ring-1 transition ${
-            err ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-red-600"
-          }`}
-          autoFocus
-        />
+          className={`w-full bg-gray-800 border rounded-xl px-4 py-3 text-sm text-white placeholder-gray-700 outline-none focus:ring-1 transition ${err ? "border-red-500 focus:ring-red-500" : "border-gray-700 focus:ring-red-700"}`}
+          autoFocus />
         {err && <p className="text-red-400 text-xs mt-2 text-center">⚠️ Clave incorrecta</p>}
-        <button
-          onClick={submit}
-          className="mt-4 w-full bg-red-700 hover:bg-red-600 text-white font-semibold py-2.5 rounded-lg transition"
-        >
+        <button onClick={submit} className="mt-4 w-full bg-red-800 hover:bg-red-700 text-white font-semibold py-2.5 rounded-xl transition">
           Acceder
         </button>
-        <button
-          onClick={onClose}
-          className="mt-2 w-full text-gray-600 hover:text-gray-400 text-sm py-1.5 transition"
-        >
+        <button onClick={onClose} className="mt-2 w-full text-gray-700 hover:text-gray-500 text-sm py-1.5 transition">
           Cancelar
         </button>
       </div>
@@ -479,7 +747,7 @@ function MasterKeyModal({ onSubmit, onClose }) {
   );
 }
 
-// ── Main App ──────────────────────────────────────────────────────────────────
+// ── App ───────────────────────────────────────────────────────────────────────
 function App() {
   const [health, setHealth] = useState(null);
   const [guilds, setGuilds] = useState([]);
@@ -497,123 +765,112 @@ function App() {
     logoClickCount.current += 1;
     clearTimeout(logoTimer.current);
     logoTimer.current = setTimeout(() => { logoClickCount.current = 0; }, 3000);
-    if (logoClickCount.current >= 5) {
-      logoClickCount.current = 0;
-      setShowModal(true);
-    }
+    if (logoClickCount.current >= 5) { logoClickCount.current = 0; setShowModal(true); }
   };
 
-  const discordColor = health?.discord === "online" ? "text-green-400" : "text-red-400";
-  const mongoColor = health?.mongo === "connected" ? "text-green-400" : "text-red-400";
+  const online  = health?.discord === "online";
+  const connected = health?.mongo === "connected";
 
   return (
     <div className="min-h-screen">
       {showModal && !masterMode && (
-        <MasterKeyModal
-          onSubmit={() => { setMasterMode(true); setShowModal(false); }}
-          onClose={() => setShowModal(false)}
-        />
+        <MasterKeyModal onSubmit={() => { setMasterMode(true); setShowModal(false); }} onClose={() => setShowModal(false)} />
       )}
 
-      {/* Header */}
-      <header className="border-b border-gray-800/50 bg-gray-950/80 backdrop-blur-sm sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+      {/* ── Header ─────────────────────────────────────────────────────────── */}
+      <header className="border-b border-gray-800/50 bg-gray-950/90 backdrop-blur-md sticky top-0 z-40">
+        <div className="max-w-7xl mx-auto px-5 py-3.5 flex items-center justify-between">
           <div className="flex items-center gap-3 cursor-pointer select-none" onClick={handleLogoClick}>
-            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition ${
-              masterMode
-                ? "bg-red-900/50 border-red-600 glow-red"
-                : "bg-blue-900/50 border-blue-700"
+            <div className={`w-10 h-10 rounded-xl flex items-center justify-center border transition duration-300 ${
+              masterMode ? "bg-red-900/60 border-red-700 glow-red" : "bg-blue-900/40 border-blue-800"
             }`}>
               <span className="text-xl">🐉</span>
             </div>
             <div>
-              <h1 className="font-bold text-white tracking-tight leading-tight">Kingdom Guardian Pro</h1>
+              <h1 className="font-bold text-white leading-tight tracking-tight">Kingdom Guardian Pro</h1>
               <p className="text-xs text-gray-600">Call of Dragons — Sistema de Gestión Militar</p>
             </div>
           </div>
 
           <div className="flex items-center gap-4">
-            {/* Status indicators */}
             <div className="hidden md:flex items-center gap-4 text-xs">
               <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${health?.discord === "online" ? "bg-green-400 pulse" : "bg-red-500"}`} />
-                <span className={discordColor}>Discord</span>
+                <span className={`w-2 h-2 rounded-full ${online ? "bg-green-400 pulse" : "bg-red-500"}`} />
+                <span className={online ? "text-green-400" : "text-red-400"}>Bot {online ? "Online" : "Offline"}</span>
               </div>
               <div className="flex items-center gap-1.5">
-                <span className={`w-2 h-2 rounded-full ${health?.mongo === "connected" ? "bg-green-400 pulse" : "bg-red-500"}`} />
-                <span className={mongoColor}>MongoDB</span>
+                <span className={`w-2 h-2 rounded-full ${connected ? "bg-green-400 pulse" : "bg-red-500"}`} />
+                <span className={connected ? "text-green-400" : "text-red-400"}>DB {connected ? "OK" : "Error"}</span>
               </div>
             </div>
-
             {masterMode && (
-              <span className="text-xs bg-red-900/40 border border-red-700 text-red-300 px-3 py-1 rounded-full font-semibold">
-                🔴 MODO MAESTRO
+              <span className="text-xs bg-red-900/40 text-red-300 border border-red-800 px-3 py-1 rounded-full flex items-center gap-1.5">
+                <Icon name="eye" size={11}/> Modo Intel
               </span>
             )}
           </div>
         </div>
       </header>
 
-      {/* Main Content */}
-      <main className="max-w-7xl mx-auto px-6 py-8">
-        {/* Banner */}
-        <div className={`rounded-2xl p-6 mb-8 border ${
-          masterMode
-            ? "bg-red-950/30 border-red-800/50 glow-red"
-            : "bg-blue-950/30 border-blue-800/50 glow-blue"
-        }`}>
-          <div className="flex items-center gap-3 mb-2">
-            <span className="text-2xl">{masterMode ? "👁️" : "⚔️"}</span>
-            <h2 className="text-xl font-bold text-white">
-              {masterMode ? "RADAR DE INTELIGENCIA — ACCESO MAESTRO" : "Centro de Comando — Vista Pública"}
-            </h2>
-          </div>
-          <p className="text-sm text-gray-400">
-            {masterMode
-              ? "Visualización global de ataques, pactos diplomáticos e historial de espionaje de todos los servidores activos."
-              : "Estadísticas públicas de alianzas, directivas militares y estado del servidor. Haz clic 5 veces en el logo para acceso avanzado."}
-          </p>
-        </div>
-
-        {/* Commands Quick Reference */}
+      {/* ── Main Content ───────────────────────────────────────────────────── */}
+      <main className="max-w-7xl mx-auto px-5 py-8">
+        {/* Quick stats bar */}
         {!masterMode && (
-          <div className="grid grid-cols-2 md:grid-cols-5 gap-3 mb-8">
-            {[
-              { icon: "🛡️", label: "El Centinela", desc: "/mod ban/kick/mute/warn/clear" },
-              { icon: "⚔️", label: "Comando Táctico", desc: "/war alert/attack/defense" },
-              { icon: "📦", label: "Banco de Suministros", desc: "/request resources" },
-              { icon: "🔍", label: "El Sweeper", desc: "/roster sweep" },
-              { icon: "🤝", label: "Panel Diplomático", desc: "/diplomacy radar/add" },
-            ].map((m, i) => (
-              <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-xl p-3 text-center hover:border-gray-700 transition">
-                <div className="text-2xl mb-1">{m.icon}</div>
-                <p className="text-xs font-semibold text-gray-200">{m.label}</p>
-                <p className="text-xs text-gray-600 mt-0.5 font-mono">{m.desc}</p>
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-8">
+            <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">🐉</span>
+              <div>
+                <p className="text-xs text-gray-600">Servidores</p>
+                <p className="font-bold text-white">{guilds.length}</p>
               </div>
-            ))}
+            </div>
+            <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 flex items-center gap-3">
+              <span className={`text-2xl ${online ? "":"opacity-40"}`}>🤖</span>
+              <div>
+                <p className="text-xs text-gray-600">Discord Bot</p>
+                <p className={`font-bold ${online ? "text-green-400":"text-red-400"}`}>{online?"Online":"Offline"}</p>
+              </div>
+            </div>
+            <div className="bg-gray-900/40 border border-gray-800 rounded-xl p-3 flex items-center gap-3">
+              <span className="text-2xl">🗄️</span>
+              <div>
+                <p className="text-xs text-gray-600">Base de Datos</p>
+                <p className={`font-bold ${connected ? "text-green-400":"text-red-400"}`}>{connected?"Conectada":"Error"}</p>
+              </div>
+            </div>
+            <button onClick={() => setShowModal(true)}
+              className="bg-gray-900/40 border border-gray-800 hover:border-red-800 rounded-xl p-3 flex items-center gap-3 transition group">
+              <span className="text-2xl group-hover:scale-110 transition-transform">🔐</span>
+              <div className="text-left">
+                <p className="text-xs text-gray-600">Acceso</p>
+                <p className="font-bold text-gray-400 group-hover:text-red-400 transition">Intel Maestro</p>
+              </div>
+            </button>
           </div>
         )}
 
-        {masterMode
-          ? <MasterIntelPanel onLock={() => setMasterMode(false)} />
-          : <PublicPanel guilds={guilds} health={health} />
-        }
-      </main>
-
-      {/* Footer */}
-      <footer className="border-t border-gray-800/50 mt-16 py-6">
-        <div className="max-w-7xl mx-auto px-6 flex items-center justify-between text-xs text-gray-700">
-          <p>Kingdom Guardian Pro © 2025 — Call of Dragons</p>
-          <p>Multi-Tenancy · MongoDB Atlas · discord.js v14</p>
+        {/* Main Panel */}
+        <div className={`bg-gray-900/30 border rounded-2xl p-6 backdrop-blur-sm ${
+          masterMode ? "border-red-900/50" : "border-gray-800/60"
+        }`}>
+          {masterMode
+            ? <MasterIntelPanel onLock={() => setMasterMode(false)} />
+            : <PublicPanel guilds={guilds} />
+          }
         </div>
-      </footer>
+
+        {/* Footer */}
+        <div className="text-center mt-8 text-gray-800 text-xs space-y-1">
+          <p>Kingdom Guardian Pro — Call of Dragons Leadership Assistant</p>
+          <p>21 comandos slash · 3 schedulers activos · Multi-tenancy MongoDB</p>
+        </div>
+      </main>
     </div>
   );
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App />);
 </script>
-
 <div id="root"></div>
 </body>
 </html>
