@@ -28,7 +28,6 @@ export const resourceCommandDefs = [
               { name: "🪵 Madera", value: "Madera" },
               { name: "🪨 Piedra", value: "Piedra" },
               { name: "💰 Oro", value: "Oro" },
-              { name: "✨ Maná", value: "Maná" },
             ),
         )
         .addIntegerOption((o) =>
@@ -37,6 +36,18 @@ export const resourceCommandDefs = [
             .setDescription("Cantidad requerida")
             .setRequired(true)
             .setMinValue(1),
+        )
+        .addStringOption((o) =>
+          o
+            .setName("proposito")
+            .setDescription("¿Para qué utilizarás los recursos?")
+            .setRequired(true)
+            .addChoices(
+              { name: "⚔️ Entrenar tropas", value: "Entrenar tropas" },
+              { name: "🔬 Investigar", value: "Investigar" },
+              { name: "🏗️ Construir", value: "Construir" },
+              { name: "🏥 Curar tropas", value: "Curar tropas" },
+            ),
         ),
     ),
 ].map((b) => b.toJSON());
@@ -65,7 +76,16 @@ export async function handleResourceCommand(
   if (sub === "resources") {
     const recurso = interaction.options.getString("recurso", true);
     const cantidad = interaction.options.getInteger("cantidad", true);
+    const proposito = interaction.options.getString("proposito", true);
     const emoji = RESOURCE_EMOJI[recurso] ?? "📦";
+
+    const PROPOSITO_EMOJI: Record<string, string> = {
+      "Entrenar tropas": "⚔️",
+      "Investigar": "🔬",
+      "Construir": "🏗️",
+      "Curar tropas": "🏥",
+    };
+    const propEmoji = PROPOSITO_EMOJI[proposito] ?? "📌";
 
     const embed = new EmbedBuilder()
       .setTitle("📦 SOLICITUD DE RECURSOS — BANCO DE SUMINISTROS")
@@ -73,19 +93,12 @@ export async function handleResourceCommand(
       .addFields(
         { name: `${emoji} Recurso`, value: recurso, inline: true },
         { name: "📊 Cantidad", value: cantidad.toLocaleString("es-ES"), inline: true },
-        { name: "Solicitante", value: `<@${interaction.user.id}>`, inline: true },
+        { name: `${propEmoji} Propósito`, value: proposito, inline: true },
+        { name: "👤 Solicitante", value: `<@${interaction.user.id}>`, inline: true },
         { name: "Estado", value: "🟡 Pendiente de ayuda", inline: false },
       )
       .setTimestamp()
       .setFooter({ text: "Kingdom Guardian Pro — Banco de Suministros • +5 pts por ayudar" });
-
-    if (recurso === "Maná") {
-      embed.addFields({
-        name: "⚠️ Nota sobre el Maná",
-        value: "El **Maná** no se puede transferir por suministros directamente, debes conseguirlo en tu ciudad.",
-        inline: false,
-      });
-    }
 
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
