@@ -92,6 +92,24 @@ export function registerVerificationListener(client: Client): void {
       // Name change detection
       const nameChanged = existing && existing.ign !== profile.ign;
 
+      // ── Role assignment: Guest → Member ───────────────────────────────────
+      let roleStatus = "✅ Registrado";
+      try {
+        const member = await message.guild.members.fetch(discordId);
+        const { guestRoleId, memberRoleId } = config;
+
+        if (memberRoleId && !member.roles.cache.has(memberRoleId)) {
+          await member.roles.add(memberRoleId);
+          roleStatus = "✅ Rol de Miembro asignado";
+        }
+        if (guestRoleId && member.roles.cache.has(guestRoleId)) {
+          await member.roles.remove(guestRoleId);
+        }
+      } catch (roleErr) {
+        logger.warn({ roleErr }, "Could not update roles during verification");
+        roleStatus = "⚠️ Registrado (no se pudo asignar rol — revisa permisos del bot)";
+      }
+
       await message.reply({
         embeds: [
           new EmbedBuilder()
@@ -100,8 +118,9 @@ export function registerVerificationListener(client: Client): void {
             .addFields(
               { name: "Character ID", value: profile.characterId, inline: true },
               { name: "IGN", value: profile.ign ?? "Extraído", inline: true },
-              { name: "Estado", value: nameChanged ? "🔄 Nombre actualizado en BD" : "✅ Registrado", inline: true },
+              { name: "Estado", value: nameChanged ? "🔄 Nombre actualizado en BD" : roleStatus, inline: true },
             )
+            .setFooter({ text: "Ya tienes acceso completo al servidor. ¡Bienvenido!" })
             .setTimestamp(),
         ],
       });

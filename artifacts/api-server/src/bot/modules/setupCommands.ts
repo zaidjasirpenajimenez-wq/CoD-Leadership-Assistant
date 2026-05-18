@@ -47,6 +47,17 @@ export const setupCommandDefs = [
         ),
     )
     .addSubcommand((s) =>
+      s
+        .setName("roles")
+        .setDescription("Configurar roles de verificación (Guest → Miembro)")
+        .addRoleOption((o) =>
+          o.setName("guest").setDescription("Rol que tienen los nuevos integrantes (Guest)").setRequired(true),
+        )
+        .addRoleOption((o) =>
+          o.setName("member").setDescription("Rol que se asigna al verificarse (Miembro)").setRequired(true),
+        ),
+    )
+    .addSubcommand((s) =>
       s.setName("status").setDescription("Ver la configuración actual del servidor"),
     ),
 ].map((b) => b.toJSON());
@@ -117,6 +128,31 @@ export async function handleSetupCommand(
         ephemeral: true,
       });
 
+    } else if (sub === "roles") {
+      const guestRole  = interaction.options.getRole("guest",  true);
+      const memberRole = interaction.options.getRole("member", true);
+
+      await GuildConfig.findOneAndUpdate(
+        { guildId },
+        { $set: { guestRoleId: guestRole.id, memberRoleId: memberRole.id } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+
+      await interaction.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("✅ Roles de Verificación Configurados")
+            .setColor(0x00cc55)
+            .addFields(
+              { name: "👤 Rol Guest (entrada)", value: `<@&${guestRole.id}>`, inline: true },
+              { name: "✅ Rol Miembro (tras verificar)", value: `<@&${memberRole.id}>`, inline: true },
+            )
+            .setDescription("Cuando un miembro suba su captura de perfil del juego al canal de verificación y pase el OCR, automáticamente perderá el rol **Guest** y ganará el rol **Miembro**.")
+            .setTimestamp(),
+        ],
+        ephemeral: true,
+      });
+
     } else if (sub === "status") {
       const config = await GuildConfig.findOne({ guildId });
       if (!config) {
@@ -128,6 +164,7 @@ export async function handleSetupCommand(
       }
 
       const ch = (id?: string) => (id ? `<#${id}>` : "❌ No configurado");
+      const rl = (id?: string | null) => (id ? `<@&${id}>` : "❌ No configurado");
 
       await interaction.reply({
         embeds: [
@@ -143,6 +180,8 @@ export async function handleSetupCommand(
               { name: "📋 Mod Logs", value: ch(config.channels.modLogs), inline: true },
               { name: "🏆 Leaderboard", value: ch(config.channels.leaderboard), inline: true },
               { name: "📢 Announcements", value: ch(config.channels.announcements), inline: true },
+              { name: "👤 Rol Guest", value: rl(config.guestRoleId), inline: true },
+              { name: "✅ Rol Miembro", value: rl(config.memberRoleId), inline: true },
               { name: "👻 Inactividad", value: `${config.inactiveDays ?? 7} días`, inline: true },
             )
             .setTimestamp(),
