@@ -32,33 +32,25 @@ export const resourceCommandDefs = [
             ),
         )
         .addIntegerOption((o) =>
-          o
-            .setName("madera")
-            .setDescription("Cantidad de Madera 🪵")
-            .setRequired(false)
-            .setMinValue(1),
+          o.setName("madera").setDescription("Cantidad de Madera 🪵").setRequired(false).setMinValue(1),
         )
         .addIntegerOption((o) =>
-          o
-            .setName("piedra")
-            .setDescription("Cantidad de Piedra 🪨")
-            .setRequired(false)
-            .setMinValue(1),
+          o.setName("piedra").setDescription("Cantidad de Piedra 🪨").setRequired(false).setMinValue(1),
         )
         .addIntegerOption((o) =>
-          o
-            .setName("oro")
-            .setDescription("Cantidad de Oro 💰")
-            .setRequired(false)
-            .setMinValue(1),
+          o.setName("oro").setDescription("Cantidad de Oro 💰").setRequired(false).setMinValue(1),
         ),
     ),
 ].map((b) => b.toJSON());
 
-// messageId → { requesterId, donorId? }
-const activeRequests = new Map<string, { requesterId: string; donorId?: string }>();
+interface RequestData {
+  requesterId: string;
+  donorId?: string;
+}
 
-// userId → messageId  (limit: 1 active request per user)
+// messageId → RequestData
+const activeRequests = new Map<string, RequestData>();
+// `${guildId}:${userId}` → messageId
 const userActiveRequest = new Map<string, string>();
 
 const PROPOSITO_EMOJI: Record<string, string> = {
@@ -68,23 +60,70 @@ const PROPOSITO_EMOJI: Record<string, string> = {
   "Curar tropas": "🏥",
 };
 
+function buildInitialButtons(msgId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`sres_help:${msgId}`)
+      .setLabel("🤝 Enviar Ayuda")
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId(`sres_cancel:${msgId}`)
+      .setLabel("❌ Cancelar solicitud")
+      .setStyle(ButtonStyle.Danger),
+  );
+}
+
+function buildWaitingConfirmButtons(msgId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`sres_help:${msgId}`)
+      .setLabel("🤝 Ayuda enviada")
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true),
+    new ButtonBuilder()
+      .setCustomId(`sres_confirm:${msgId}`)
+      .setLabel("✅ Confirmar recepción")
+      .setStyle(ButtonStyle.Success),
+  );
+}
+
+function buildCompletedButtons(msgId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`sres_done:${msgId}`)
+      .setLabel("✅ Completado")
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(true),
+  );
+}
+
+function buildCancelledButtons(msgId: string): ActionRowBuilder<ButtonBuilder> {
+  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`sres_cancelled:${msgId}`)
+      .setLabel("❌ Cancelada")
+      .setStyle(ButtonStyle.Danger)
+      .setDisabled(true),
+  );
+}
+
 export async function handleResourceCommand(
   interaction: ChatInputCommandInteraction,
 ): Promise<void> {
   if (!interaction.guild) return;
   const sub = interaction.options.getSubcommand();
+  if (sub !== "resources") return;
+
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
 
-  if (sub !== "resources") return;
-
   await interaction.deferReply({ ephemeral: true });
 
-  // Check if user already has an active request
+  // Limit: 1 active request per user
   const existingMsgId = userActiveRequest.get(`${guildId}:${userId}`);
   if (existingMsgId && activeRequests.has(existingMsgId)) {
     await interaction.editReply({
-      content: "⚠️ Ya tienes una solicitud activa pendiente. Espera a que sea atendida antes de hacer una nueva.",
+      content: "⚠️ Ya tienes una solicitud activa pendiente. Espera a que sea atendida o cancélala antes de hacer una nueva.",
     });
     return;
   }
@@ -92,9 +131,8 @@ export async function handleResourceCommand(
   const proposito = interaction.options.getString("proposito", true);
   const madera = interaction.options.getInteger("madera");
   const piedra = interaction.options.getInteger("piedra");
-  const oro = interaction.options.getInteger("oro");
+  const oro    = interaction.options.getInteger("oro");
 
-  // At least one resource must be specified
   if (!madera && !piedra && !oro) {
     await interaction.editReply({
       content: "❌ Debes especificar al menos un recurso (Madera, Piedra u Oro).",
@@ -126,36 +164,25 @@ export async function handleResourceCommand(
       { name: "Estado", value: "🟡 Pendiente de ayuda", inline: false },
     )
     .setTimestamp()
-    .setFooter({ text: "Kingdom Guardian Pro — Banco de Suministros • +5 pts por ayudar" });
+    .setFooter({ text: "Kingdom Guardian Pro — Banco de Suministros • +5 pts al confirmar ayuda" });
 
-  const placeholderRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId("sres_help:PLACEHOLDER")
-      .setLabel("🤝 Enviar Ayuda")
-      .setStyle(ButtonStyle.Primary),
-  );
-
+  // Send with placeholder first, then update with real IDs
+  const placeholderRow = buildInitialButtons("PLACEHOLDER");
   const msg = await targetChan.send({ embeds: [embed], components: [placeholderRow] });
 
   activeRequests.set(msg.id, { requesterId: userId });
   userActiveRequest.set(`${guildId}:${userId}`, msg.id);
 
-  const realRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`sres_help:${msg.id}`)
-      .setLabel("🤝 Enviar Ayuda")
-      .setStyle(ButtonStyle.Primary),
-  );
-  await msg.edit({ components: [realRow] });
+  await msg.edit({ components: [buildInitialButtons(msg.id)] });
 
-  const resumenRecursos = [
+  const resumen = [
     madera ? `🪵 Madera: **${madera.toLocaleString("es-ES")}**` : null,
     piedra ? `🪨 Piedra: **${piedra.toLocaleString("es-ES")}**` : null,
     oro    ? `💰 Oro: **${oro.toLocaleString("es-ES")}**`       : null,
   ].filter(Boolean).join("\n");
 
   await interaction.editReply({
-    content: `✅ Solicitud publicada en ${targetChan}:\n${resumenRecursos}\n${propEmoji} Para: **${proposito}**`,
+    content: `✅ Solicitud publicada en ${targetChan}:\n${resumen}\n${propEmoji} Para: **${proposito}**`,
   });
 }
 
@@ -166,72 +193,145 @@ export async function handleResourceButton(
   const [action, messageId] = interaction.customId.split(":");
   const userId = interaction.user.id;
   const guildId = interaction.guild.id;
-
-  if (action !== "sres_help") return;
-
   const data = activeRequests.get(messageId);
-  if (!data) {
-    await interaction.reply({
-      content: "Esta solicitud ya fue completada o no existe.",
-      ephemeral: true,
+
+  // ── Cancelar solicitud ─────────────────────────────────────────────────────
+  if (action === "sres_cancel") {
+    if (!data) {
+      await interaction.reply({ content: "Esta solicitud ya no existe.", ephemeral: true });
+      return;
+    }
+    if (data.requesterId !== userId) {
+      await interaction.reply({
+        content: "❌ Solo el solicitante puede cancelar esta solicitud.",
+        ephemeral: true,
+      });
+      return;
+    }
+    if (data.donorId) {
+      await interaction.reply({
+        content: "⚠️ Ya hay alguien enviándote ayuda. Confirma la recepción o contacta al donante.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    const oldEmbed = interaction.message.embeds[0];
+    const updated = EmbedBuilder.from(oldEmbed)
+      .spliceFields(
+        oldEmbed.fields.findIndex((f) => f.name === "Estado"),
+        1,
+        { name: "Estado", value: "❌ Cancelada por el solicitante", inline: false },
+      )
+      .setColor(0xcc2222);
+
+    await interaction.update({ embeds: [updated], components: [buildCancelledButtons(messageId)] });
+
+    userActiveRequest.delete(`${guildId}:${data.requesterId}`);
+    activeRequests.delete(messageId);
+    return;
+  }
+
+  // ── Enviar ayuda ───────────────────────────────────────────────────────────
+  if (action === "sres_help") {
+    if (!data) {
+      await interaction.reply({ content: "Esta solicitud ya no existe.", ephemeral: true });
+      return;
+    }
+    if (data.donorId) {
+      await interaction.reply({
+        content: "⚠️ Esta solicitud ya fue aceptada por otro jugador.",
+        ephemeral: true,
+      });
+      return;
+    }
+    if (data.requesterId === userId) {
+      await interaction.reply({
+        content: "❌ No puedes ayudarte a ti mismo.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    data.donorId = userId;
+
+    const oldEmbed = interaction.message.embeds[0];
+    const updated = EmbedBuilder.from(oldEmbed)
+      .spliceFields(
+        oldEmbed.fields.findIndex((f) => f.name === "Estado"),
+        1,
+        {
+          name: "Estado",
+          value: `🟢 Ayuda en camino — <@${userId}> está enviando los recursos\n📌 <@${data.requesterId}> confirma cuando los recibas`,
+          inline: false,
+        },
+      )
+      .setColor(0x3399ff);
+
+    await interaction.update({
+      embeds: [updated],
+      components: [buildWaitingConfirmButtons(messageId)],
     });
     return;
   }
-  if (data.donorId) {
-    await interaction.reply({
-      content: "⚠️ Esta solicitud ya fue aceptada por otro jugador.",
-      ephemeral: true,
+
+  // ── Confirmar recepción ────────────────────────────────────────────────────
+  if (action === "sres_confirm") {
+    if (!data) {
+      await interaction.reply({ content: "Esta solicitud ya fue cerrada.", ephemeral: true });
+      return;
+    }
+    if (data.requesterId !== userId) {
+      await interaction.reply({
+        content: "❌ Solo el solicitante puede confirmar la recepción.",
+        ephemeral: true,
+      });
+      return;
+    }
+    if (!data.donorId) {
+      await interaction.reply({
+        content: "⚠️ Nadie ha aceptado tu solicitud todavía.",
+        ephemeral: true,
+      });
+      return;
+    }
+
+    // Award +5 pts to the donor now that delivery is confirmed
+    try {
+      await UserProfile.findOneAndUpdate(
+        { discordId: data.donorId, guildId },
+        { $inc: { weeklyPoints: 5, totalPoints: 5 } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+    } catch (err) {
+      logger.error({ err }, "Failed to award resource donation points");
+    }
+
+    const oldEmbed = interaction.message.embeds[0];
+    const updated = EmbedBuilder.from(oldEmbed)
+      .spliceFields(
+        oldEmbed.fields.findIndex((f) => f.name === "Estado"),
+        1,
+        {
+          name: "Estado",
+          value: `✅ COMPLETADO — <@${data.requesterId}> confirmó la recepción\n🏅 +5 pts acreditados a <@${data.donorId}>`,
+          inline: false,
+        },
+      )
+      .setColor(0x00cc55);
+
+    await interaction.update({
+      embeds: [updated],
+      components: [buildCompletedButtons(messageId)],
     });
+
+    await interaction.followUp({
+      content: `✅ ¡Recepción confirmada! <@${data.donorId}> recibe **+5 puntos semanales** por su ayuda.`,
+      ephemeral: false,
+    });
+
+    userActiveRequest.delete(`${guildId}:${data.requesterId}`);
+    activeRequests.delete(messageId);
     return;
   }
-  if (data.requesterId === userId) {
-    await interaction.reply({
-      content: "❌ No puedes ayudarte a ti mismo.",
-      ephemeral: true,
-    });
-    return;
-  }
-
-  data.donorId = userId;
-
-  try {
-    await UserProfile.findOneAndUpdate(
-      { discordId: userId, guildId },
-      { $inc: { weeklyPoints: 5, totalPoints: 5 } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
-    );
-  } catch (err) {
-    logger.error({ err }, "Failed to award resource donation points");
-  }
-
-  const oldEmbed = interaction.message.embeds[0];
-  const updated = EmbedBuilder.from(oldEmbed)
-    .spliceFields(
-      oldEmbed.fields.findIndex((f) => f.name === "Estado"),
-      1,
-      {
-        name: "Estado",
-        value: `✅ COMPLETADO — Ayudado por <@${userId}>`,
-        inline: false,
-      },
-    )
-    .setColor(0x00cc55);
-
-  const disabledRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`sres_help:${messageId}`)
-      .setLabel("✅ Completado")
-      .setStyle(ButtonStyle.Success)
-      .setDisabled(true),
-  );
-
-  await interaction.update({ embeds: [updated], components: [disabledRow] });
-  await interaction.followUp({
-    content: "✅ ¡Registrado! +5 puntos semanales acreditados por tu ayuda.",
-    ephemeral: true,
-  });
-
-  // Free up the requester's slot
-  userActiveRequest.delete(`${guildId}:${data.requesterId}`);
-  activeRequests.delete(messageId);
 }
