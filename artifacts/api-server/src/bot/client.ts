@@ -19,7 +19,7 @@ import { registerVerificationListener } from "./modules/sweeperCommands";
 import { modCommandDefs, handleModCommand } from "./modules/modCommands";
 import { warCommandDefs, handleWarCommand, handleAlertButton } from "./modules/warCommands";
 import { resourceCommandDefs, handleResourceCommand, handleResourceButton } from "./modules/resourceCommands";
-import { sweeperCommandDefs, handleSweeperCommand } from "./modules/sweeperCommands";
+import { sweeperCommandDefs, handleSweeperCommand, registerGuestRoleAssigner } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
 import { setupCommandDefs, handleSetupCommand } from "./modules/setupCommands";
 import {
@@ -95,6 +95,7 @@ export async function startBot(): Promise<void> {
 
   registerSentinel(client);
   registerVerificationListener(client);
+  registerGuestRoleAssigner(client);
 
   client.once(Events.ClientReady, async (ready) => {
     logger.info({ tag: ready.user.tag }, "Discord bot online");

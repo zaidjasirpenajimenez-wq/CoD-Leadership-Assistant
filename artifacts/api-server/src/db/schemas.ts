@@ -14,6 +14,7 @@ export interface IGuildConfig extends Document {
     leaderboard?: string;
     announcements?: string;
   };
+  gameServerId?: string;
   guestRoleId?: string;
   memberRoleId?: string;
   inactiveDays: number;
@@ -36,6 +37,7 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
       leaderboard: String,
       announcements: String,
     },
+    gameServerId: { type: String, default: null },
     guestRoleId: { type: String, default: null },
     memberRoleId: { type: String, default: null },
     inactiveDays: { type: Number, default: 7 },

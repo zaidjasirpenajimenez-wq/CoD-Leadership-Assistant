@@ -25,6 +25,23 @@ export const sweeperCommandDefs = [
     ),
 ].map((b) => b.toJSON());
 
+export function registerGuestRoleAssigner(client: Client): void {
+  client.on(Events.GuildMemberAdd, async (member) => {
+    try {
+      const config = await GuildConfig.findOne({ guildId: member.guild.id }).catch(() => null);
+      if (!config?.guestRoleId) return;
+
+      const role = member.guild.roles.cache.get(config.guestRoleId);
+      if (!role) return;
+
+      await member.roles.add(role);
+      logger.info({ userId: member.id, guildId: member.guild.id, role: role.name }, "Guest role assigned on join");
+    } catch (err) {
+      logger.warn({ err, userId: member.id }, "Failed to assign Guest role on join");
+    }
+  });
+}
+
 export function registerVerificationListener(client: Client): void {
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot || !message.guild) return;
@@ -44,8 +61,43 @@ export function registerVerificationListener(client: Client): void {
       const profile = parseProfileFromText(text);
 
       if (!profile.characterId) {
-        await message.reply("❌ No se pudo detectar un Character ID en la imagen. Sube una captura clara de tu perfil.");
+        await message.reply("❌ No se pudo detectar un Character ID en la imagen. Sube una captura clara de tu perfil del juego.");
         return;
+      }
+
+      // ── Server number validation ───────────────────────────────────────────
+      if (config.gameServerId) {
+        if (!profile.gameServer) {
+          await message.reply(
+            `❌ No se pudo detectar el número de servidor en tu captura.\n` +
+            `Asegurate de que el número de servidor **#${config.gameServerId}** sea visible en la imagen.`,
+          );
+          return;
+        }
+        if (profile.gameServer !== config.gameServerId) {
+          const modChan = message.guild.channels.cache.get(config.channels?.modLogs ?? "") as TextChannel | undefined;
+          if (modChan) {
+            await modChan.send({
+              embeds: [
+                new EmbedBuilder()
+                  .setTitle("⚠️ Intento de Verificación — Servidor Incorrecto")
+                  .setColor(0xff8800)
+                  .addFields(
+                    { name: "Usuario", value: `<@${message.author.id}>`, inline: true },
+                    { name: "Servidor detectado", value: `#${profile.gameServer}`, inline: true },
+                    { name: "Servidor requerido", value: `#${config.gameServerId}`, inline: true },
+                    { name: "IGN detectado", value: profile.ign ?? "Desconocido", inline: true },
+                  )
+                  .setTimestamp(),
+              ],
+            });
+          }
+          await message.reply(
+            `❌ Tu perfil pertenece al servidor **#${profile.gameServer}**, pero este Discord es del servidor **#${config.gameServerId}**.\n` +
+            `No puedes verificarte en una alianza de otro servidor.`,
+          );
+          return;
+        }
       }
 
       const guildId = message.guild.id;

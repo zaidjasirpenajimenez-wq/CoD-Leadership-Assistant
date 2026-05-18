@@ -15,9 +15,12 @@ export const setupCommandDefs = [
     .addSubcommand((s) =>
       s
         .setName("alliance")
-        .setDescription("Configurar tag de la alianza")
+        .setDescription("Configurar tag de la alianza y número de servidor del juego")
         .addStringOption((o) =>
           o.setName("tag").setDescription("Tag de la alianza (ej: KGP)").setRequired(true),
+        )
+        .addStringOption((o) =>
+          o.setName("servidor").setDescription("Número de servidor del juego (ej: 1423)").setRequired(true),
         ),
     )
     .addSubcommand((s) =>
@@ -71,13 +74,17 @@ export async function handleSetupCommand(
 
   try {
     if (sub === "alliance") {
-      const tag = interaction.options.getString("tag", true);
+      const tag      = interaction.options.getString("tag", true);
+      const servidor = interaction.options.getString("servidor", true);
       await GuildConfig.findOneAndUpdate(
         { guildId },
-        { allianceTag: tag },
+        { allianceTag: tag, gameServerId: servidor },
         { upsert: true, new: true, setDefaultsOnInsert: true },
       );
-      await interaction.reply({ content: `✅ Tag de alianza configurado: **[${tag}]**`, ephemeral: true });
+      await interaction.reply({
+        content: `✅ Alianza configurada: **[${tag}]** — Servidor del juego: **#${servidor}**\nSolo se podrán verificar jugadores del servidor **${servidor}**.`,
+        ephemeral: true,
+      });
 
     } else if (sub === "channels") {
       const warAlerts = interaction.options.getChannel("war_alerts")?.id;
@@ -180,6 +187,7 @@ export async function handleSetupCommand(
               { name: "📋 Mod Logs", value: ch(config.channels.modLogs), inline: true },
               { name: "🏆 Leaderboard", value: ch(config.channels.leaderboard), inline: true },
               { name: "📢 Announcements", value: ch(config.channels.announcements), inline: true },
+              { name: "🎮 Servidor del Juego", value: config.gameServerId ? `#${config.gameServerId}` : "❌ No configurado", inline: true },
               { name: "👤 Rol Guest", value: rl(config.guestRoleId), inline: true },
               { name: "✅ Rol Miembro", value: rl(config.memberRoleId), inline: true },
               { name: "👻 Inactividad", value: `${config.inactiveDays ?? 7} días`, inline: true },

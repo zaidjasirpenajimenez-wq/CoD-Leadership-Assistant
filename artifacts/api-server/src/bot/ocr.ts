@@ -74,29 +74,46 @@ export function parseResourcesFromText(text: string): ResourceScan {
 export interface ProfileScan {
   characterId: string | null;
   ign: string | null;
+  gameServer: string | null;
 }
 
 export function parseProfileFromText(text: string): ProfileScan {
   const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  const result: ProfileScan = { characterId: null, ign: null };
+  const result: ProfileScan = { characterId: null, ign: null, gameServer: null };
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
+
     // Character ID: usually a large numeric string (8+ digits)
     const idMatch = line.match(/\b(\d{8,})\b/);
     if (idMatch && !result.characterId) {
       result.characterId = idMatch[1];
     }
-    // IGN: look for "ID:" or "Name:" labels, or just pick the first clean string
-    if (/^(name|ign|player|character|lord)[\s:]/i.test(line)) {
-      const ign = line.replace(/^(name|ign|player|character|lord)[\s:]*/i, "").trim();
+
+    // Game server number: patterns like "Server: 1234", "S1234", "Servidor: 1234",
+    // "Server 1234", "#1234", or standalone 3-4 digit numbers near server keywords
+    if (!result.gameServer) {
+      const serverMatch =
+        line.match(/(?:server|servidor|srv|s)[:\s#]*(\d{3,5})/i) ??
+        line.match(/^#?(\d{3,5})$/) ??
+        line.match(/\bS(\d{3,5})\b/i);
+      if (serverMatch) {
+        result.gameServer = serverMatch[1];
+      }
+    }
+
+    // IGN: look for label keywords
+    if (/^(name|ign|player|character|lord|nombre)[\s:]/i.test(line)) {
+      const ign = line.replace(/^(name|ign|player|character|lord|nombre)[\s:]*/i, "").trim();
       if (ign.length > 1) result.ign = ign;
     }
   }
 
-  // Fallback: ign = first non-numeric line
+  // Fallback: ign = first non-numeric, non-server line
   if (!result.ign && lines.length > 0) {
-    const candidate = lines.find((l) => !/^\d+$/.test(l) && l.length > 1);
+    const candidate = lines.find(
+      (l) => !/^\d+$/.test(l) && l.length > 1 && !/^(server|servidor|srv)/i.test(l),
+    );
     if (candidate) result.ign = candidate;
   }
 
