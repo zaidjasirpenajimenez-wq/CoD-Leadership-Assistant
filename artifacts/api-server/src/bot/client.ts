@@ -40,7 +40,6 @@ import {
   handlePointsCommand,
   handleBoxCommand,
 } from "./modules/pointsCommands";
-import { kvkCommandDefs, handleKvkCommand } from "./modules/kvkCommands";
 import { sanctionCommandDefs, handleSanctionCommand } from "./modules/sanctionCommands";
 import { sosCommandDefs, handleSosCommand, handleSosButton } from "./modules/sosCommands";
 import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeaderboard, startInactivityChecker } from "./modules/timerCommands";
@@ -58,7 +57,6 @@ const ALL_COMMANDS = [
   ...communicationCommandDefs,
   ...operationsCommandDefs,
   ...pointsCommandDefs,
-  ...kvkCommandDefs,
   ...sanctionCommandDefs,
   ...sosCommandDefs,
   ...timerCommandDefs,
@@ -191,10 +189,6 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
       break;
     case "box":
       await handleBoxCommand(interaction);
-      break;
-    // ── KVK Tracker ───────────────────────────────────────────────────────
-    case "kvk":
-      await handleKvkCommand(interaction);
       break;
     // ── Libro de Sanciones ────────────────────────────────────────────────
     case "sanction":
