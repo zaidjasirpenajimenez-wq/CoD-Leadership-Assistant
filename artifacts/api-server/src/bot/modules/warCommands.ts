@@ -19,7 +19,15 @@ export const warCommandDefs = [
     .addSubcommand((s) =>
       s.setName("alert")
         .setDescription("Publicar alerta de guerra")
-        .addStringOption((o) => o.setName("prioridad").setDescription("CRÍTICA / ALTA / MEDIA").setRequired(true))
+        .addStringOption((o) =>
+          o.setName("prioridad").setDescription("Nivel de prioridad de la alerta").setRequired(true)
+            .addChoices(
+              { name: "🔴 Critical", value: "Critical" },
+              { name: "🟠 High",     value: "High" },
+              { name: "🟡 Medium",   value: "Medium" },
+              { name: "🟢 Low",      value: "Low" },
+            ),
+        )
         .addStringOption((o) => o.setName("detalles").setDescription("Detalles de la alerta").setRequired(true)),
     )
     .addSubcommand((s) =>
@@ -28,7 +36,16 @@ export const warCommandDefs = [
         .addStringOption((o) => o.setName("objetivo").setDescription("Objetivo del ataque").setRequired(true))
         .addStringOption((o) => o.setName("coordenadas").setDescription("Coordenadas X:Y").setRequired(true))
         .addStringOption((o) => o.setName("tropa").setDescription("Tipo de tropa requerida").setRequired(true))
-        .addStringOption((o) => o.setName("hora_utc").setDescription("Hora en UTC (ej: 20:00 UTC)").setRequired(true)),
+        .addStringOption((o) => o.setName("hora_utc").setDescription("Hora en UTC (ej: 20:00 UTC)").setRequired(true))
+        .addStringOption((o) =>
+          o.setName("prioridad").setDescription("Nivel de prioridad").setRequired(true)
+            .addChoices(
+              { name: "🔴 Critical", value: "Critical" },
+              { name: "🟠 High",     value: "High" },
+              { name: "🟡 Medium",   value: "Medium" },
+              { name: "🟢 Low",      value: "Low" },
+            ),
+        ),
     )
     .addSubcommand((s) =>
       s.setName("defense")
@@ -37,7 +54,13 @@ export const warCommandDefs = [
         .addStringOption((o) => o.setName("coordenadas").setDescription("Coordenadas X:Y").setRequired(true))
         .addStringOption((o) => o.setName("capitan").setDescription("Capitán de guarnición").setRequired(true))
         .addStringOption((o) =>
-          o.setName("prioridad").setDescription("CRÍTICA / ALTA / MEDIA").setRequired(true),
+          o.setName("prioridad").setDescription("Nivel de prioridad").setRequired(true)
+            .addChoices(
+              { name: "🔴 Critical", value: "Critical" },
+              { name: "🟠 High",     value: "High" },
+              { name: "🟡 Medium",   value: "Medium" },
+              { name: "🟢 Low",      value: "Low" },
+            ),
         ),
     ),
 ].map((b) => b.toJSON());
@@ -69,14 +92,22 @@ function buildAlertEmbed(
   counts: { ready: number; late: number; no: number },
 ): EmbedBuilder {
   const priorityColors: Record<string, number> = {
-    CRÍTICA: 0xff0000,
-    ALTA: 0xff8800,
-    MEDIA: 0xffdd00,
+    Critical: 0xff0000,
+    High:     0xff8800,
+    Medium:   0xffcc00,
+    Low:      0x00cc44,
   };
-  const color = priorityColors[priority.toUpperCase()] ?? 0xff4400;
+  const priorityEmoji: Record<string, string> = {
+    Critical: "🔴",
+    High:     "🟠",
+    Medium:   "🟡",
+    Low:      "🟢",
+  };
+  const color = priorityColors[priority] ?? 0xff4400;
+  const pEmoji = priorityEmoji[priority] ?? "⚡";
 
   return new EmbedBuilder()
-    .setTitle(`🚨 ALERTA DE GUERRA — PRIORIDAD: ${priority.toUpperCase()}`)
+    .setTitle(`🚨 ALERTA DE GUERRA — ${pEmoji} ${priority.toUpperCase()}`)
     .setColor(color)
     .setDescription(`@here\n\n**${details}**`)
     .addFields(
@@ -135,13 +166,17 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       const coords = interaction.options.getString("coordenadas", true);
       const tropa = interaction.options.getString("tropa", true);
       const hora = interaction.options.getString("hora_utc", true);
+      const priority = interaction.options.getString("prioridad", true);
 
       const channelId = config?.channels?.attackOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
+      const atkColors: Record<string, number> = { Critical: 0xff0000, High: 0xff8800, Medium: 0xffcc00, Low: 0x00cc44 };
+      const atkEmoji:  Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+
       const embed = new EmbedBuilder()
-        .setTitle("⚔️ ORDEN DE ATAQUE")
-        .setColor(0xcc0000)
+        .setTitle(`⚔️ ORDEN DE ATAQUE — ${atkEmoji[priority] ?? "⚡"} ${priority.toUpperCase()}`)
+        .setColor(atkColors[priority] ?? 0xcc0000)
         .addFields(
           { name: "🎯 Objetivo", value: objetivo, inline: true },
           { name: "📍 Coordenadas", value: coords, inline: true },
@@ -173,14 +208,17 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       const channelId = config?.channels?.defenseOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
+      const defColors: Record<string, number> = { Critical: 0xff0000, High: 0xff8800, Medium: 0xffcc00, Low: 0x00cc44 };
+      const defEmoji:  Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+
       const embed = new EmbedBuilder()
-        .setTitle("🛡️ ORDEN DE DEFENSA")
-        .setColor(0x0055cc)
+        .setTitle(`🛡️ ORDEN DE DEFENSA — ${defEmoji[priority] ?? "⚡"} ${priority.toUpperCase()}`)
+        .setColor(defColors[priority] ?? 0x0055cc)
         .addFields(
           { name: "🏰 Estructura", value: estructura, inline: true },
           { name: "📍 Coordenadas", value: coords, inline: true },
           { name: "👑 Capitán", value: capitan, inline: true },
-          { name: "⚡ Prioridad", value: priority.toUpperCase(), inline: true },
+          { name: `${defEmoji[priority] ?? "⚡"} Prioridad`, value: priority, inline: true },
           { name: "Comandante", value: `<@${interaction.user.id}>`, inline: true },
         )
         .setTimestamp()

@@ -42,7 +42,6 @@ import {
 } from "./modules/pointsCommands";
 import { kvkCommandDefs, handleKvkCommand } from "./modules/kvkCommands";
 import { sanctionCommandDefs, handleSanctionCommand } from "./modules/sanctionCommands";
-import { rallyCommandDefs, handleRallyCommand, handleRallyButton } from "./modules/rallyCommands";
 import { sosCommandDefs, handleSosCommand, handleSosButton } from "./modules/sosCommands";
 import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeaderboard, startInactivityChecker } from "./modules/timerCommands";
 import { leaderboardCommandDefs, handleLeaderboardCommand } from "./modules/leaderboardCommands";
@@ -61,7 +60,6 @@ const ALL_COMMANDS = [
   ...pointsCommandDefs,
   ...kvkCommandDefs,
   ...sanctionCommandDefs,
-  ...rallyCommandDefs,
   ...sosCommandDefs,
   ...timerCommandDefs,
   ...leaderboardCommandDefs,
@@ -202,10 +200,6 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "sanction":
       await handleSanctionCommand(interaction);
       break;
-    // ── Rally Coordinator ─────────────────────────────────────────────────
-    case "rally":
-      await handleRallyCommand(interaction);
-      break;
     // ── SOS Emergencia ────────────────────────────────────────────────────
     case "sos":
       await handleSosCommand(interaction);
@@ -242,8 +236,6 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await handleCommunicationButton(interaction);
   } else if (customId.startsWith("raid_") || customId.startsWith("build_")) {
     await handleOperationsButton(interaction);
-  } else if (customId.startsWith("rally_join:") || customId.startsWith("rally_leave:")) {
-    await handleRallyButton(interaction);
   } else if (customId.startsWith("sos_go:")) {
     await handleSosButton(interaction);
   }
