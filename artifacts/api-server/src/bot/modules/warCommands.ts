@@ -65,93 +65,84 @@ export const warCommandDefs = [
     ),
 ].map((b) => b.toJSON());
 
-// Track alert responses: messageId → { ready, late, no }
 const alertResponses = new Map<string, { ready: string[]; late: string[]; no: string[] }>();
+
+const PRIORITY_COLOR: Record<string, number>  = { Critical: 0xed4245, High: 0xff7b00, Medium: 0xfee75c, Low: 0x57f287 };
+const PRIORITY_EMOJI: Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+const PRIORITY_LABEL: Record<string, string>  = { Critical: "CRÍTICO", High: "ALTO", Medium: "MEDIO", Low: "BAJO" };
 
 function buildAlertButtons(messageId: string): ActionRowBuilder<ButtonBuilder> {
   return new ActionRowBuilder<ButtonBuilder>().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`alert_ready:${messageId}`)
-      .setLabel("✅ En camino")
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`alert_no:${messageId}`)
-      .setLabel("❌ No disponible")
-      .setStyle(ButtonStyle.Danger),
-    new ButtonBuilder()
-      .setCustomId(`alert_late:${messageId}`)
-      .setLabel("⏳ Llego tarde")
-      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`alert_ready:${messageId}`).setLabel("✅ En camino").setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId(`alert_no:${messageId}`).setLabel("❌ No disponible").setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId(`alert_late:${messageId}`).setLabel("⏳ Llego tarde").setStyle(ButtonStyle.Secondary),
   );
+}
+
+function responderBar(count: number): string {
+  if (count === 0) return "—";
+  return `**${count}** miembro${count !== 1 ? "s" : ""}`;
 }
 
 function buildAlertEmbed(
   priority: string,
   details: string,
-  reporter: string,
+  reporterId: string,
+  reporterName: string,
+  reporterAvatar: string,
   counts: { ready: number; late: number; no: number },
 ): EmbedBuilder {
-  const priorityColors: Record<string, number> = {
-    Critical: 0xff0000,
-    High:     0xff8800,
-    Medium:   0xffcc00,
-    Low:      0x00cc44,
-  };
-  const priorityEmoji: Record<string, string> = {
-    Critical: "🔴",
-    High:     "🟠",
-    Medium:   "🟡",
-    Low:      "🟢",
-  };
-  const color = priorityColors[priority] ?? 0xff4400;
-  const pEmoji = priorityEmoji[priority] ?? "⚡";
+  const color  = PRIORITY_COLOR[priority] ?? 0xff4400;
+  const pEmoji = PRIORITY_EMOJI[priority] ?? "⚡";
+  const pLabel = PRIORITY_LABEL[priority] ?? priority.toUpperCase();
+  const now    = Math.floor(Date.now() / 1000);
 
   return new EmbedBuilder()
-    .setTitle(`🚨 ALERTA DE GUERRA — ${pEmoji} ${priority.toUpperCase()}`)
+    .setAuthor({ name: reporterName, iconURL: reporterAvatar })
+    .setTitle(`${pEmoji}  ALERTA DE GUERRA — NIVEL ${pLabel}`)
     .setColor(color)
-    .setDescription(`@here\n\n**${details}**`)
-    .addFields(
-      { name: "✅ En camino", value: String(counts.ready), inline: true },
-      { name: "⏳ Llego tarde", value: String(counts.late), inline: true },
-      { name: "❌ No disponible", value: String(counts.no), inline: true },
+    .setDescription(
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `> ${details}\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
     )
-    .addFields({ name: "Reportado por", value: `<@${reporter}>`, inline: false })
+    .addFields(
+      { name: "👤 Reportado por", value: `<@${reporterId}>`,      inline: true },
+      { name: "🕐 Hora",          value: `<t:${now}:t>`,           inline: true },
+      { name: "🎖️ Prioridad",    value: `${pEmoji} **${pLabel}**`, inline: true },
+      { name: "✅ En camino",     value: responderBar(counts.ready), inline: true },
+      { name: "⏳ Llego tarde",   value: responderBar(counts.late),  inline: true },
+      { name: "❌ No disponible", value: responderBar(counts.no),    inline: true },
+    )
     .setTimestamp()
-    .setFooter({ text: "Kingdom Guardian Pro — Sistema Táctico" });
+    .setFooter({ text: "Kingdom Guardian Pro  •  Sistema Táctico  •  Responde abajo 👇" });
 }
 
 export async function handleWarCommand(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guild) return;
-  const sub = interaction.options.getSubcommand();
-  const guildId = interaction.guild.id;
-  const config = await GuildConfig.findOne({ guildId });
+  const sub      = interaction.options.getSubcommand();
+  const guildId  = interaction.guild.id;
+  const config   = await GuildConfig.findOne({ guildId });
+  const member   = interaction.guild.members.cache.get(interaction.user.id);
+  const userName  = member?.displayName ?? interaction.user.username;
+  const userAvatar = interaction.user.displayAvatarURL();
 
   try {
     if (sub === "alert") {
       const priority = interaction.options.getString("prioridad", true);
-      const details = interaction.options.getString("detalles", true);
-
+      const details  = interaction.options.getString("detalles", true);
       const channelId = config?.channels?.warAlerts ?? interaction.channelId;
-      const chan = interaction.guild.channels.cache.get(channelId) as TextChannel | undefined;
-      const targetChan = chan ?? (interaction.channel as TextChannel);
+      const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
       const counts = { ready: 0, late: 0, no: 0 };
-      const embed = buildAlertEmbed(priority, details, interaction.user.id, counts);
-      const placeholder = "PLACEHOLDER";
-      const row = buildAlertButtons(placeholder);
+      const embed  = buildAlertEmbed(priority, details, interaction.user.id, userName, userAvatar, counts);
+      const row    = buildAlertButtons("PLACEHOLDER");
 
-      const msg = await targetChan.send({ embeds: [embed], components: [row] });
-
-      // Store response tracking keyed by actual message ID
+      const msg = await chan.send({ embeds: [embed], components: [row] });
       alertResponses.set(msg.id, { ready: [], late: [], no: [] });
+      await msg.edit({ components: [buildAlertButtons(msg.id)] });
+      await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
 
-      // Update button custom IDs to use real message ID
-      const realRow = buildAlertButtons(msg.id);
-      await msg.edit({ components: [realRow] });
-
-      await interaction.reply({ content: `✅ Alerta publicada en ${targetChan}`, ephemeral: true });
-
-      // Record covert intel
       await recordIntel({
         sourceGuildId: guildId,
         allianceTag: config?.allianceTag ?? "UNKNOWN",
@@ -163,32 +154,39 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
 
     } else if (sub === "attack") {
       const objetivo = interaction.options.getString("objetivo", true);
-      const coords = interaction.options.getString("coordenadas", true);
-      const tropa = interaction.options.getString("tropa", true);
-      const hora = interaction.options.getString("hora_utc", true);
+      const coords   = interaction.options.getString("coordenadas", true);
+      const tropa    = interaction.options.getString("tropa", true);
+      const hora     = interaction.options.getString("hora_utc", true);
       const priority = interaction.options.getString("prioridad", true);
-
       const channelId = config?.channels?.attackOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
-      const atkColors: Record<string, number> = { Critical: 0xff0000, High: 0xff8800, Medium: 0xffcc00, Low: 0x00cc44 };
-      const atkEmoji:  Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+      const color  = PRIORITY_COLOR[priority] ?? 0xcc0000;
+      const pEmoji = PRIORITY_EMOJI[priority] ?? "⚡";
+      const pLabel = PRIORITY_LABEL[priority] ?? priority.toUpperCase();
 
       const embed = new EmbedBuilder()
-        .setTitle(`⚔️ ORDEN DE ATAQUE — ${atkEmoji[priority] ?? "⚡"} ${priority.toUpperCase()}`)
-        .setColor(atkColors[priority] ?? 0xcc0000)
+        .setAuthor({ name: userName, iconURL: userAvatar })
+        .setTitle(`⚔️  ORDEN DE ATAQUE`)
+        .setColor(color)
+        .setDescription(
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `**OBJETIVO  ›  ${objetivo}**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        )
         .addFields(
-          { name: "🎯 Objetivo", value: objetivo, inline: true },
-          { name: "📍 Coordenadas", value: coords, inline: true },
-          { name: "⚔️ Tropa Requerida", value: tropa, inline: true },
-          { name: "🕐 Hora de Ataque (UTC)", value: hora, inline: true },
-          { name: "Comandante", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "📍 Coordenadas",      value: `\`\`${coords}\`\``,         inline: true },
+          { name: "⚔️ Tropa Requerida",  value: tropa,                        inline: true },
+          { name: "🕐 Hora de Ataque",   value: `\`\`${hora}\`\``,            inline: true },
+          { name: "🎖️ Prioridad",        value: `${pEmoji} **${pLabel}**`,    inline: true },
+          { name: "👑 Comandante",        value: `<@${interaction.user.id}>`,  inline: true },
+          { name: "\u200b",              value: "\u200b",                      inline: true },
         )
         .setTimestamp()
-        .setFooter({ text: "Kingdom Guardian Pro — Comando Táctico" });
+        .setFooter({ text: "Kingdom Guardian Pro  •  Comando Táctico  •  Ejecuten la orden" });
 
       await chan.send({ embeds: [embed] });
-      await interaction.reply({ content: `⚔️ Orden de ataque publicada en ${chan}`, ephemeral: true });
+      await interaction.reply({ content: `⚔️ Orden publicada en ${chan}`, ephemeral: true });
 
       await recordIntel({
         sourceGuildId: guildId,
@@ -201,28 +199,35 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
 
     } else if (sub === "defense") {
       const estructura = interaction.options.getString("estructura", true);
-      const coords = interaction.options.getString("coordenadas", true);
-      const capitan = interaction.options.getString("capitan", true);
-      const priority = interaction.options.getString("prioridad", true);
-
-      const channelId = config?.channels?.defenseOrders ?? interaction.channelId;
+      const coords     = interaction.options.getString("coordenadas", true);
+      const capitan    = interaction.options.getString("capitan", true);
+      const priority   = interaction.options.getString("prioridad", true);
+      const channelId  = config?.channels?.defenseOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
-      const defColors: Record<string, number> = { Critical: 0xff0000, High: 0xff8800, Medium: 0xffcc00, Low: 0x00cc44 };
-      const defEmoji:  Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+      const color  = PRIORITY_COLOR[priority] ?? 0x0055cc;
+      const pEmoji = PRIORITY_EMOJI[priority] ?? "⚡";
+      const pLabel = PRIORITY_LABEL[priority] ?? priority.toUpperCase();
 
       const embed = new EmbedBuilder()
-        .setTitle(`🛡️ ORDEN DE DEFENSA — ${defEmoji[priority] ?? "⚡"} ${priority.toUpperCase()}`)
-        .setColor(defColors[priority] ?? 0x0055cc)
+        .setAuthor({ name: userName, iconURL: userAvatar })
+        .setTitle(`🛡️  ORDEN DE DEFENSA`)
+        .setColor(color)
+        .setDescription(
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+          `**DEFENDER  ›  ${estructura}**\n` +
+          `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+        )
         .addFields(
-          { name: "🏰 Estructura", value: estructura, inline: true },
-          { name: "📍 Coordenadas", value: coords, inline: true },
-          { name: "👑 Capitán", value: capitan, inline: true },
-          { name: `${defEmoji[priority] ?? "⚡"} Prioridad`, value: priority, inline: true },
-          { name: "Comandante", value: `<@${interaction.user.id}>`, inline: true },
+          { name: "📍 Coordenadas",   value: `\`\`${coords}\`\``,        inline: true },
+          { name: "👑 Capitán",       value: capitan,                     inline: true },
+          { name: "🎖️ Prioridad",    value: `${pEmoji} **${pLabel}**`,   inline: true },
+          { name: "🗡️ Comandante",   value: `<@${interaction.user.id}>`, inline: true },
+          { name: "⏰ Emitida",       value: `<t:${Math.floor(Date.now() / 1000)}:R>`, inline: true },
+          { name: "\u200b",           value: "\u200b",                    inline: true },
         )
         .setTimestamp()
-        .setFooter({ text: "Kingdom Guardian Pro — Comando Táctico" });
+        .setFooter({ text: "Kingdom Guardian Pro  •  Comando Táctico  •  ¡A las posiciones!" });
 
       await chan.send({ embeds: [embed] });
       await interaction.reply({ content: `🛡️ Orden de defensa publicada en ${chan}`, ephemeral: true });
@@ -251,25 +256,24 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
   }
 
   const userId = interaction.user.id;
-
-  // Remove user from all categories first
   data.ready = data.ready.filter((id) => id !== userId);
-  data.late = data.late.filter((id) => id !== userId);
-  data.no = data.no.filter((id) => id !== userId);
+  data.late  = data.late.filter((id) => id !== userId);
+  data.no    = data.no.filter((id) => id !== userId);
 
   if (action === "alert_ready") data.ready.push(userId);
   else if (action === "alert_late") data.late.push(userId);
   else if (action === "alert_no") data.no.push(userId);
 
-  // Update the embed in place
   const oldEmbed = interaction.message.embeds[0];
   if (!oldEmbed) return;
 
   const updated = EmbedBuilder.from(oldEmbed).setFields(
-    { name: "✅ En camino", value: String(data.ready.length), inline: true },
-    { name: "⏳ Llego tarde", value: String(data.late.length), inline: true },
-    { name: "❌ No disponible", value: String(data.no.length), inline: true },
-    { name: "Reportado por", value: oldEmbed.fields.find((f) => f.name === "Reportado por")?.value ?? "—", inline: false },
+    { name: "👤 Reportado por", value: oldEmbed.fields.find((f) => f.name === "👤 Reportado por")?.value ?? "—", inline: true },
+    { name: "🕐 Hora",          value: oldEmbed.fields.find((f) => f.name === "🕐 Hora")?.value ?? "—",          inline: true },
+    { name: "🎖️ Prioridad",    value: oldEmbed.fields.find((f) => f.name === "🎖️ Prioridad")?.value ?? "—",    inline: true },
+    { name: "✅ En camino",     value: responderBar(data.ready.length), inline: true },
+    { name: "⏳ Llego tarde",   value: responderBar(data.late.length),  inline: true },
+    { name: "❌ No disponible", value: responderBar(data.no.length),    inline: true },
   );
 
   await interaction.update({ embeds: [updated] });

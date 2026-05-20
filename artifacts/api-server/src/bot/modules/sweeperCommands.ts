@@ -61,17 +61,45 @@ export function registerVerificationListener(client: Client): void {
       const profile = parseProfileFromText(text);
 
       if (!profile.characterId) {
-        await message.reply("❌ No se pudo detectar un Character ID en la imagen. Sube una captura clara de tu perfil del juego.");
+        await message.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("❌  OCR — Character ID No Detectado")
+              .setColor(0xed4245)
+              .setDescription(
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `No se pudo leer un **Character ID** en tu imagen.\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+              )
+              .addFields({ name: "💡 ¿Qué hacer?", value: "Sube una captura **clara y completa** de tu perfil del juego donde el ID sea visible.", inline: false })
+              .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+              .setTimestamp(),
+          ],
+        });
         return;
       }
 
       // ── Server number validation ───────────────────────────────────────────
       if (config.gameServerId) {
         if (!profile.gameServer) {
-          await message.reply(
-            `❌ No se pudo detectar el número de servidor en tu captura.\n` +
-            `Asegurate de que el número de servidor **#${config.gameServerId}** sea visible en la imagen.`,
-          );
+          await message.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("❌  Servidor No Detectado en la Imagen")
+                .setColor(0xff7b00)
+                .setDescription(
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `No se pudo leer el **número de servidor** en tu captura.\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                )
+                .addFields(
+                  { name: "🎮 Servidor requerido", value: `**#${config.gameServerId}**`, inline: true },
+                  { name: "💡 ¿Qué hacer?",        value: `Asegúrate de que el número **#${config.gameServerId}** sea visible en la imagen.`, inline: false },
+                )
+                .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+                .setTimestamp(),
+            ],
+          });
           return;
         }
         if (profile.gameServer !== config.gameServerId) {
@@ -80,22 +108,41 @@ export function registerVerificationListener(client: Client): void {
             await modChan.send({
               embeds: [
                 new EmbedBuilder()
-                  .setTitle("⚠️ Intento de Verificación — Servidor Incorrecto")
-                  .setColor(0xff8800)
-                  .addFields(
-                    { name: "Usuario", value: `<@${message.author.id}>`, inline: true },
-                    { name: "Servidor detectado", value: `#${profile.gameServer}`, inline: true },
-                    { name: "Servidor requerido", value: `#${config.gameServerId}`, inline: true },
-                    { name: "IGN detectado", value: profile.ign ?? "Desconocido", inline: true },
+                  .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+                  .setTitle("🚫  VERIFICACIÓN RECHAZADA — Servidor Incorrecto")
+                  .setColor(0xff7b00)
+                  .setDescription(
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `<@${message.author.id}> intentó verificarse con un perfil de otro servidor.\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
                   )
-                  .setTimestamp(),
+                  .addFields(
+                    { name: "👤 Usuario",             value: `<@${message.author.id}>`,  inline: true },
+                    { name: "🎮 Servidor detectado",  value: `**#${profile.gameServer}**`, inline: true },
+                    { name: "✅ Servidor requerido",  value: `**#${config.gameServerId}**`, inline: true },
+                    { name: "🗡️ IGN detectado",       value: profile.ign ?? "Desconocido", inline: true },
+                  )
+                  .setTimestamp()
+                  .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" }),
               ],
             });
           }
-          await message.reply(
-            `❌ Tu perfil pertenece al servidor **#${profile.gameServer}**, pero este Discord es del servidor **#${config.gameServerId}**.\n` +
-            `No puedes verificarte en una alianza de otro servidor.`,
-          );
+          await message.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("🚫  Servidor de Juego Incorrecto")
+                .setColor(0xff7b00)
+                .setDescription(
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `Tu perfil pertenece al servidor **#${profile.gameServer}**,\n` +
+                  `pero este Discord corresponde al servidor **#${config.gameServerId}**.\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                )
+                .addFields({ name: "ℹ️ Info", value: "No puedes verificarte en una alianza de otro servidor.", inline: false })
+                .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+                .setTimestamp(),
+            ],
+          });
           return;
         }
       }
@@ -112,19 +159,42 @@ export function registerVerificationListener(client: Client): void {
           await chan.send({
             embeds: [
               new EmbedBuilder()
-                .setTitle("🚨 ALERTA DE ESPÍA — Character ID Duplicado")
-                .setColor(0xff0000)
-                .addFields(
-                  { name: "Character ID", value: profile.characterId, inline: true },
-                  { name: "IGN Detectado", value: profile.ign ?? "Desconocido", inline: true },
-                  { name: "Reclamado por", value: `<@${existing.discordId}>`, inline: true },
-                  { name: "Nuevo intento por", value: `<@${discordId}>`, inline: true },
+                .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+                .setTitle("🚨  ALERTA DE ESPÍA — Character ID Duplicado")
+                .setColor(0xed4245)
+                .setDescription(
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `Un Character ID ya registrado fue reclamado por **otra** cuenta de Discord.\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
                 )
-                .setTimestamp(),
+                .addFields(
+                  { name: "🆔 Character ID",    value: `\`${profile.characterId}\``,   inline: true },
+                  { name: "🗡️ IGN detectado",   value: profile.ign ?? "Desconocido",   inline: true },
+                  { name: "\u200b",              value: "\u200b",                       inline: true },
+                  { name: "✅ Cuenta original", value: `<@${existing.discordId}>`,     inline: true },
+                  { name: "⚠️ Nuevo intento",   value: `<@${discordId}>`,              inline: true },
+                  { name: "\u200b",              value: "\u200b",                       inline: true },
+                )
+                .setTimestamp()
+                .setFooter({ text: "Kingdom Guardian Pro  •  Sistema Anti-Espía" }),
             ],
           });
         }
-        await message.reply("⚠️ Este Character ID ya está registrado con otra cuenta de Discord. El caso fue reportado a los moderadores.");
+        await message.reply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("⚠️  Character ID Ya Registrado")
+              .setColor(0xed4245)
+              .setDescription(
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                `Este Character ID ya está vinculado a **otra cuenta de Discord**.\n` +
+                `El caso fue reportado automáticamente a los moderadores.\n` +
+                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+              )
+              .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+              .setTimestamp(),
+          ],
+        });
         return;
       }
 
@@ -165,20 +235,41 @@ export function registerVerificationListener(client: Client): void {
       await message.reply({
         embeds: [
           new EmbedBuilder()
-            .setTitle("✅ Verificación Exitosa")
-            .setColor(0x00cc55)
-            .addFields(
-              { name: "Character ID", value: profile.characterId, inline: true },
-              { name: "IGN", value: profile.ign ?? "Extraído", inline: true },
-              { name: "Estado", value: nameChanged ? "🔄 Nombre actualizado en BD" : roleStatus, inline: true },
+            .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+            .setTitle("✅  VERIFICACIÓN EXITOSA")
+            .setColor(0x57f287)
+            .setDescription(
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `¡Bienvenido/a a la alianza, **${profile.ign ?? message.author.username}**! 🎉\n` +
+              `Ya tienes acceso completo al servidor.\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
             )
-            .setFooter({ text: "Ya tienes acceso completo al servidor. ¡Bienvenido!" })
-            .setTimestamp(),
+            .addFields(
+              { name: "🆔 Character ID",  value: `\`${profile.characterId}\``,                      inline: true },
+              { name: "🗡️ IGN",           value: profile.ign ?? "Extraído",                          inline: true },
+              { name: "🎖️ Estado",        value: nameChanged ? "🔄 Nombre actualizado" : roleStatus, inline: true },
+            )
+            .setTimestamp()
+            .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" }),
         ],
       });
     } catch (err) {
       logger.error({ err }, "Profile verification OCR failed");
-      await message.reply("❌ Error al procesar la imagen. Asegúrate de subir una captura clara de tu perfil del juego.");
+      await message.reply({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle("❌  Error al Procesar la Imagen")
+            .setColor(0xed4245)
+            .setDescription(
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+              `No se pudo analizar la imagen correctamente.\n` +
+              `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+            )
+            .addFields({ name: "💡 Sugerencia", value: "Asegúrate de subir una captura **nítida** de tu perfil del juego, con buena iluminación y sin recortes.", inline: false })
+            .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+            .setTimestamp(),
+        ],
+      });
     }
   });
 }
@@ -214,25 +305,34 @@ export async function handleSweeperCommand(interaction: ChatInputCommandInteract
       }
     }
 
+    const clean     = suspects.length === 0;
+    const memberName = interaction.guild.members.cache.get(interaction.user.id)?.displayName ?? interaction.user.username;
+
     const embed = new EmbedBuilder()
-      .setTitle("🔍 ROSTER SWEEP — Reporte de Espías")
-      .setColor(suspects.length > 0 ? 0xff4400 : 0x00cc55)
+      .setAuthor({ name: `Análisis por ${memberName}`, iconURL: interaction.user.displayAvatarURL() })
+      .setTitle(`🔍  ROSTER SWEEP — ${clean ? "TODO LIMPIO" : `${suspects.length} SOSPECHOSO${suspects.length !== 1 ? "S" : ""}`}`)
+      .setColor(clean ? 0x57f287 : 0xed4245)
+      .setDescription(
+        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+        (clean
+          ? `✅ Todos los miembros del juego están registrados en Discord.`
+          : `⚠️ Se detectaron **${suspects.length}** nombre${suspects.length !== 1 ? "s" : ""} sin registro Discord.`) +
+        `\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+      )
       .addFields(
-        { name: "📋 Líneas analizadas", value: String(lines.length), inline: true },
-        { name: "✅ Miembros verificados", value: String(lines.length - suspects.length), inline: true },
-        { name: "⚠️ Sospechosos", value: String(suspects.length), inline: true },
+        { name: "📋 Líneas analizadas",    value: `**${lines.length}**`,                    inline: true },
+        { name: "✅ Verificados",           value: `**${lines.length - suspects.length}**`,  inline: true },
+        { name: "⚠️ Sospechosos",          value: `**${suspects.length}**`,                 inline: true },
       )
       .setTimestamp()
-      .setFooter({ text: "Kingdom Guardian Pro — El Sweeper" });
+      .setFooter({ text: "Kingdom Guardian Pro  •  Sistema Sweeper Anti-Espía" });
 
     if (suspects.length > 0) {
       embed.addFields({
-        name: "🚨 Usuarios en juego sin registro Discord (Posibles Espías)",
-        value: suspects.map((s) => `⚠️ \`${s}\``).join("\n").slice(0, 1024),
+        name: "🚨 Sin registro Discord (posibles espías)",
+        value: suspects.map((s) => `> ⚠️ \`${s}\``).join("\n").slice(0, 1024),
         inline: false,
       });
-    } else {
-      embed.addFields({ name: "✅ Sin Sospechosos", value: "Todos los miembros del juego están registrados en Discord.", inline: false });
     }
 
     await interaction.editReply({ embeds: [embed] });
