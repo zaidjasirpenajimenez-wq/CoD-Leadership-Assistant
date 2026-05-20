@@ -5,6 +5,7 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  Role,
   SlashCommandBuilder,
   TextChannel,
 } from "discord.js";
@@ -28,7 +29,8 @@ export const warCommandDefs = [
               { name: "🟢 Low",      value: "Low" },
             ),
         )
-        .addStringOption((o) => o.setName("detalles").setDescription("Detalles de la alerta").setRequired(true)),
+        .addStringOption((o) => o.setName("detalles").setDescription("Detalles de la alerta").setRequired(true))
+        .addRoleOption((o) => o.setName("mencionar").setDescription("Rol a pingear con la alerta").setRequired(false)),
     )
     .addSubcommand((s) =>
       s.setName("attack")
@@ -45,7 +47,8 @@ export const warCommandDefs = [
               { name: "🟡 Medium",   value: "Medium" },
               { name: "🟢 Low",      value: "Low" },
             ),
-        ),
+        )
+        .addRoleOption((o) => o.setName("mencionar").setDescription("Rol a pingear con la orden").setRequired(false)),
     )
     .addSubcommand((s) =>
       s.setName("defense")
@@ -61,7 +64,8 @@ export const warCommandDefs = [
               { name: "🟡 Medium",   value: "Medium" },
               { name: "🟢 Low",      value: "Low" },
             ),
-        ),
+        )
+        .addRoleOption((o) => o.setName("mencionar").setDescription("Rol a pingear con la orden").setRequired(false)),
     ),
 ].map((b) => b.toJSON());
 
@@ -129,16 +133,23 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
 
   try {
     if (sub === "alert") {
-      const priority = interaction.options.getString("prioridad", true);
-      const details  = interaction.options.getString("detalles", true);
+      const priority  = interaction.options.getString("prioridad", true);
+      const details   = interaction.options.getString("detalles", true);
+      const mentionRole = interaction.options.getRole("mencionar") as Role | null;
       const channelId = config?.channels?.warAlerts ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
       const counts = { ready: 0, late: 0, no: 0 };
       const embed  = buildAlertEmbed(priority, details, interaction.user.id, userName, userAvatar, counts);
       const row    = buildAlertButtons("PLACEHOLDER");
+      const pingContent = mentionRole ? `<@&${mentionRole.id}>` : "@here";
 
-      const msg = await chan.send({ embeds: [embed], components: [row] });
+      const msg = await chan.send({
+        content: pingContent,
+        embeds: [embed],
+        components: [row],
+        allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: ["everyone"] },
+      });
       alertResponses.set(msg.id, { ready: [], late: [], no: [] });
       await msg.edit({ components: [buildAlertButtons(msg.id)] });
       await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
@@ -153,12 +164,13 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       });
 
     } else if (sub === "attack") {
-      const objetivo = interaction.options.getString("objetivo", true);
-      const coords   = interaction.options.getString("coordenadas", true);
-      const tropa    = interaction.options.getString("tropa", true);
-      const hora     = interaction.options.getString("hora_utc", true);
-      const priority = interaction.options.getString("prioridad", true);
-      const channelId = config?.channels?.attackOrders ?? interaction.channelId;
+      const objetivo    = interaction.options.getString("objetivo", true);
+      const coords      = interaction.options.getString("coordenadas", true);
+      const tropa       = interaction.options.getString("tropa", true);
+      const hora        = interaction.options.getString("hora_utc", true);
+      const priority    = interaction.options.getString("prioridad", true);
+      const mentionRole = interaction.options.getRole("mencionar") as Role | null;
+      const channelId   = config?.channels?.attackOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
       const color  = PRIORITY_COLOR[priority] ?? 0xcc0000;
@@ -185,7 +197,12 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         .setTimestamp()
         .setFooter({ text: "Kingdom Guardian Pro  •  Comando Táctico  •  Ejecuten la orden" });
 
-      await chan.send({ embeds: [embed] });
+      const pingContent = mentionRole ? `<@&${mentionRole.id}>` : null;
+      await chan.send({
+        content: pingContent ?? undefined,
+        embeds: [embed],
+        allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: [] },
+      });
       await interaction.reply({ content: `⚔️ Orden publicada en ${chan}`, ephemeral: true });
 
       await recordIntel({
@@ -198,11 +215,12 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       });
 
     } else if (sub === "defense") {
-      const estructura = interaction.options.getString("estructura", true);
-      const coords     = interaction.options.getString("coordenadas", true);
-      const capitan    = interaction.options.getString("capitan", true);
-      const priority   = interaction.options.getString("prioridad", true);
-      const channelId  = config?.channels?.defenseOrders ?? interaction.channelId;
+      const estructura  = interaction.options.getString("estructura", true);
+      const coords      = interaction.options.getString("coordenadas", true);
+      const capitan     = interaction.options.getString("capitan", true);
+      const priority    = interaction.options.getString("prioridad", true);
+      const mentionRole = interaction.options.getRole("mencionar") as Role | null;
+      const channelId   = config?.channels?.defenseOrders ?? interaction.channelId;
       const chan = (interaction.guild.channels.cache.get(channelId) ?? interaction.channel) as TextChannel;
 
       const color  = PRIORITY_COLOR[priority] ?? 0x0055cc;
@@ -229,7 +247,12 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         .setTimestamp()
         .setFooter({ text: "Kingdom Guardian Pro  •  Comando Táctico  •  ¡A las posiciones!" });
 
-      await chan.send({ embeds: [embed] });
+      const pingContent = mentionRole ? `<@&${mentionRole.id}>` : null;
+      await chan.send({
+        content: pingContent ?? undefined,
+        embeds: [embed],
+        allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: [] },
+      });
       await interaction.reply({ content: `🛡️ Orden de defensa publicada en ${chan}`, ephemeral: true });
 
       await recordIntel({
