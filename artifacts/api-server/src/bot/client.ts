@@ -20,7 +20,7 @@ import { registerVerificationListener } from "./modules/sweeperCommands";
 
 import { modCommandDefs, handleModCommand } from "./modules/modCommands";
 import { warCommandDefs, handleWarCommand, handleAlertButton, handleAlertClose, handleAlertConfirmSelect, handleAlertExtraSelect } from "./modules/warCommands";
-import { resourceCommandDefs, handleResourceCommand, handleResourceButton, handleResourceHistory } from "./modules/resourceCommands";
+import { resourceCommandDefs, handleResourceCommand, handleResourceButton, handleResourceHistory, donateCommandDefs, handleDonateCommand } from "./modules/resourceCommands";
 import { sweeperCommandDefs, handleSweeperCommand, registerGuestRoleAssigner } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
 import { setupCommandDefs, handleSetupCommand } from "./modules/setupCommands";
@@ -65,6 +65,7 @@ const ALL_COMMANDS = [
   ...leaderboardCommandDefs,
   ...statsCommandDefs,
   ...memberCommandDefs,
+  ...donateCommandDefs,
 ];
 
 let discordClient: Client | null = null;
@@ -224,6 +225,10 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     // ── Gestión de miembros ───────────────────────────────────────────────
     case "member":
       await handleMemberCommand(interaction);
+      break;
+    // ── Donaciones ────────────────────────────────────────────────────────
+    case "donate":
+      await handleDonateCommand(interaction);
       break;
     default:
       await interaction.reply({ content: "Comando no reconocido.", ephemeral: true });

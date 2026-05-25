@@ -299,6 +299,20 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
       ephemeral: false,
     });
 
+    const recursos = [
+      data.madera ? `🪵 ${fmt(data.madera)} Madera` : null,
+      data.piedra ? `🪨 ${fmt(data.piedra)} Piedra` : null,
+      data.oro    ? `💰 ${fmt(data.oro)} Oro`       : null,
+    ].filter(Boolean).join(" · ");
+    interaction.client.users.fetch(data.donorId).then((donorUser) =>
+      donorUser.send(
+        `✅ **¡Donación confirmada!**\n` +
+        `<@${data!.requesterId}> (**${data!.requesterName}**) confirmó que recibió tus recursos.\n` +
+        `📦 ${recursos}\n` +
+        `🏅 **+5 puntos semanales** acreditados en tu perfil. ¡Gracias por tu aporte!`,
+      ).catch(() => {}),
+    ).catch(() => {});
+
     userActiveRequest.delete(`${guildId}:${data.requesterId}`);
     ResourceRequestLog.create({
       guildId,
@@ -317,6 +331,96 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
     processingConfirm.delete(messageId);
     return;
   }
+}
+
+export const donateCommandDefs = [
+  new SlashCommandBuilder()
+    .setName("donate")
+    .setDescription("Historial de donaciones de recursos")
+    .addSubcommand((s) =>
+      s
+        .setName("history")
+        .setDescription("Ver historial de recursos que has donado")
+        .addUserOption((o) =>
+          o.setName("usuario").setDescription("Ver historial de donaciones de otro miembro (solo R4/R5)").setRequired(false),
+        )
+        .addIntegerOption((o) =>
+          o.setName("limite").setDescription("Cantidad a mostrar (máx 15, por defecto 10)").setRequired(false).setMinValue(1).setMaxValue(15),
+        ),
+    ),
+].map((b) => b.toJSON());
+
+export async function handleDonateCommand(interaction: ChatInputCommandInteraction): Promise<void> {
+  if (!interaction.guild) return;
+  const sub = interaction.options.getSubcommand();
+  if (sub !== "history") return;
+
+  const guildId    = interaction.guild.id;
+  await interaction.deferReply({ ephemeral: true });
+
+  const targetUser = interaction.options.getUser("usuario");
+  const limite     = interaction.options.getInteger("limite") ?? 10;
+
+  if (targetUser && targetUser.id !== interaction.user.id) {
+    const member = interaction.guild.members.cache.get(interaction.user.id);
+    if (!member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+      await interaction.editReply({ content: "❌ Solo los oficiales (R4/R5) pueden consultar el historial de donaciones de otros." });
+      return;
+    }
+  }
+
+  const donorId      = targetUser?.id ?? interaction.user.id;
+  const targetMember = interaction.guild.members.cache.get(donorId);
+  const targetName   = targetMember?.displayName ?? targetUser?.username ?? "este miembro";
+
+  const logs = await ResourceRequestLog.find({ guildId, donorId, status: "done" })
+    .sort({ closedAt: -1 })
+    .limit(limite)
+    .lean();
+
+  if (logs.length === 0) {
+    await interaction.editReply({ content: `📭 <@${donorId}> no tiene donaciones registradas todavía.` });
+    return;
+  }
+
+  const totalDonations = await ResourceRequestLog.countDocuments({ guildId, donorId, status: "done" });
+
+  const totMadera = await ResourceRequestLog.aggregate([
+    { $match: { guildId, donorId, status: "done" } },
+    { $group: { _id: null, madera: { $sum: "$madera" }, piedra: { $sum: "$piedra" }, oro: { $sum: "$oro" } } },
+  ]);
+  const totals = totMadera[0] ?? { madera: 0, piedra: 0, oro: 0 };
+
+  const lines = logs.map((log, i) => {
+    const date     = `<t:${Math.floor(new Date(log.closedAt).getTime() / 1000)}:d>`;
+    const recursos = [
+      log.madera ? `🪵 ${fmt(log.madera)}` : null,
+      log.piedra ? `🪨 ${fmt(log.piedra)}` : null,
+      log.oro    ? `💰 ${fmt(log.oro)}`    : null,
+    ].filter(Boolean).join(" ");
+    const propEmoji = PROPOSITO_EMOJI[log.proposito] ?? "📌";
+    return `🟢 **#${i + 1}** ${date} — ${propEmoji} ${log.proposito}\n> ${recursos} → a <@${log.requesterId}>`;
+  });
+
+  const totalResLine = [
+    totals.madera ? `🪵 ${fmt(totals.madera)}` : null,
+    totals.piedra ? `🪨 ${fmt(totals.piedra)}` : null,
+    totals.oro    ? `💰 ${fmt(totals.oro)}`    : null,
+  ].filter(Boolean).join("  ·  ") || "—";
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🤝 Historial de donaciones — ${targetName}`)
+    .setColor(0x57f287)
+    .setDescription(lines.join("\n\n"))
+    .addFields(
+      { name: "📦 Donaciones totales", value: `**${totalDonations}**`, inline: true },
+      { name: "🏅 Pts ganados",        value: `**${totalDonations * 5}**`, inline: true },
+      { name: "📊 Recursos acumulados", value: totalResLine, inline: false },
+    )
+    .setFooter({ text: `Mostrando las últimas ${logs.length} donaciones · Kingdom Guardian Pro` })
+    .setTimestamp();
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 export async function handleResourceHistory(interaction: ChatInputCommandInteraction): Promise<void> {
