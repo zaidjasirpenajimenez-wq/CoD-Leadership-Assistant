@@ -204,6 +204,42 @@ export const SanctionRecord: Model<ISanctionRecord> =
   mongoose.models["SanctionRecord"] ||
   mongoose.model<ISanctionRecord>("SanctionRecord", SanctionRecordSchema);
 
+// ── ResourceRequestLog ───────────────────────────────────────────────────────
+export interface IResourceRequestLog extends Document {
+  guildId: string;
+  requesterId: string;
+  requesterName: string;
+  donorId?: string;
+  proposito: string;
+  madera: number;
+  piedra: number;
+  oro: number;
+  status: "done" | "cancelled";
+  createdAt: Date;
+  closedAt: Date;
+}
+
+const ResourceRequestLogSchema = new Schema<IResourceRequestLog>(
+  {
+    guildId:       { type: String, required: true, index: true },
+    requesterId:   { type: String, required: true, index: true },
+    requesterName: { type: String, default: "" },
+    donorId:       { type: String, default: null },
+    proposito:     { type: String, default: "" },
+    madera:        { type: Number, default: 0 },
+    piedra:        { type: Number, default: 0 },
+    oro:           { type: Number, default: 0 },
+    status:        { type: String, enum: ["done", "cancelled"], required: true },
+    createdAt:     { type: Date, default: Date.now },
+    closedAt:      { type: Date, default: Date.now },
+  },
+  { strict: true },
+);
+
+export const ResourceRequestLog: Model<IResourceRequestLog> =
+  mongoose.models["ResourceRequestLog"] ||
+  mongoose.model<IResourceRequestLog>("ResourceRequestLog", ResourceRequestLogSchema);
+
 // ── ScheduledTimer ───────────────────────────────────────────────────────────
 export interface IScheduledTimer extends Document {
   guildId: string;

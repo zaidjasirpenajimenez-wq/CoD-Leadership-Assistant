@@ -20,7 +20,7 @@ import { registerVerificationListener } from "./modules/sweeperCommands";
 
 import { modCommandDefs, handleModCommand } from "./modules/modCommands";
 import { warCommandDefs, handleWarCommand, handleAlertButton, handleAlertClose, handleAlertConfirmSelect, handleAlertExtraSelect } from "./modules/warCommands";
-import { resourceCommandDefs, handleResourceCommand, handleResourceButton } from "./modules/resourceCommands";
+import { resourceCommandDefs, handleResourceCommand, handleResourceButton, handleResourceHistory } from "./modules/resourceCommands";
 import { sweeperCommandDefs, handleSweeperCommand, registerGuestRoleAssigner } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
 import { setupCommandDefs, handleSetupCommand } from "./modules/setupCommands";
@@ -164,7 +164,11 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
       await handleWarCommand(interaction);
       break;
     case "request":
-      await handleResourceCommand(interaction);
+      if (interaction.options.getSubcommand() === "history") {
+        await handleResourceHistory(interaction);
+      } else {
+        await handleResourceCommand(interaction);
+      }
       break;
     case "roster":
       await handleSweeperCommand(interaction);
