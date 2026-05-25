@@ -9,6 +9,7 @@ import {
   ButtonInteraction,
   ModalSubmitInteraction,
   StringSelectMenuInteraction,
+  UserSelectMenuInteraction,
   Interaction,
 } from "discord.js";
 import { logger } from "../lib/logger";
@@ -18,7 +19,7 @@ import { registerSentinel } from "./modules/sentinel";
 import { registerVerificationListener } from "./modules/sweeperCommands";
 
 import { modCommandDefs, handleModCommand } from "./modules/modCommands";
-import { warCommandDefs, handleWarCommand, handleAlertButton, handleAlertClose, handleAlertConfirmSelect } from "./modules/warCommands";
+import { warCommandDefs, handleWarCommand, handleAlertButton, handleAlertClose, handleAlertConfirmSelect, handleAlertExtraSelect } from "./modules/warCommands";
 import { resourceCommandDefs, handleResourceCommand, handleResourceButton } from "./modules/resourceCommands";
 import { sweeperCommandDefs, handleSweeperCommand, registerGuestRoleAssigner } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
@@ -123,6 +124,8 @@ export async function startBot(): Promise<void> {
         await handleButton(interaction as ButtonInteraction);
       } else if (interaction.isStringSelectMenu()) {
         await handleSelectMenu(interaction as StringSelectMenuInteraction);
+      } else if (interaction.isUserSelectMenu()) {
+        await handleUserSelectMenu(interaction as UserSelectMenuInteraction);
       } else if (interaction.isModalSubmit()) {
         await handleModal(interaction as ModalSubmitInteraction);
       }
@@ -246,6 +249,14 @@ async function handleSelectMenu(interaction: StringSelectMenuInteraction): Promi
 
   if (customId.startsWith("alert_confirm_select:")) {
     await handleAlertConfirmSelect(interaction);
+  }
+}
+
+async function handleUserSelectMenu(interaction: UserSelectMenuInteraction): Promise<void> {
+  const customId = interaction.customId;
+
+  if (customId.startsWith("alert_extra_select:")) {
+    await handleAlertExtraSelect(interaction);
   }
 }
 

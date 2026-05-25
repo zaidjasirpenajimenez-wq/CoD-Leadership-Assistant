@@ -12,6 +12,8 @@ import {
   StringSelectMenuInteraction,
   StringSelectMenuOptionBuilder,
   TextChannel,
+  UserSelectMenuBuilder,
+  UserSelectMenuInteraction,
 } from "discord.js";
 import { GuildConfig, UserProfile } from "../../db/schemas";
 import { recordIntel } from "../intel";
@@ -435,17 +437,56 @@ export async function handleAlertClose(interaction: ButtonInteraction): Promise<
     .setMaxValues(options.length)
     .addOptions(options);
 
-  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+  const listRow  = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  const extraMenu = new UserSelectMenuBuilder()
+    .setCustomId(`alert_extra_select:${messageId}`)
+    .setPlaceholder("Jugadores que ayudaron pero no respondieron en Discord…")
+    .setMinValues(0)
+    .setMaxValues(10);
+
+  const extraRow = new ActionRowBuilder<UserSelectMenuBuilder>().addComponents(extraMenu);
 
   await interaction.reply({
     content:
       `**🗡️ Confirmar asistencia de guerra**\n` +
-      `Selecciona los miembros que efectivamente participaron:\n` +
-      `> ✅ En camino confirmado → **+5 pts**\n` +
-      `> ⏳ Llego tarde confirmado → **+2 pts**`,
-    components: [row],
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+      `**① Respondieron en Discord** — selecciona quién participó:\n` +
+      `> ✅ En camino → **+5 pts** · ⏳ Llego tarde → **+2 pts**\n\n` +
+      `**② No respondieron pero sí ayudaron** — agrégalos antes de confirmar:\n` +
+      `> 👥 Extras → **+5 pts** c/u\n` +
+      `━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+    components: [listRow, extraRow],
     ephemeral: true,
   });
+}
+
+export async function handleAlertExtraSelect(interaction: UserSelectMenuInteraction): Promise<void> {
+  if (!interaction.guild) return;
+  const [, messageId] = interaction.customId.split(":");
+  const guildId  = interaction.guild.id;
+  const members  = interaction.guild.members.cache;
+  const lines: string[] = [];
+
+  for (const userId of interaction.values) {
+    try {
+      await UserProfile.findOneAndUpdate(
+        { discordId: userId, guildId },
+        { $inc: { weeklyPoints: 5, totalPoints: 5 } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      const name = members.get(userId)?.displayName ?? `<@${userId}>`;
+      lines.push(`👥 **${name}** — +5 pts`);
+    } catch (err) {
+      logger.error({ err }, "Failed to award extra war participation points");
+    }
+  }
+
+  const summary = lines.length > 0
+    ? `✅ **Extras acreditados:**\n${lines.join("\n")}\n\n*Ahora usa la lista ① para cerrar la alerta.*`
+    : "⚠️ No se seleccionó ningún jugador extra.";
+
+  await interaction.reply({ content: summary, ephemeral: true });
 }
 
 export async function handleAlertConfirmSelect(interaction: StringSelectMenuInteraction): Promise<void> {
