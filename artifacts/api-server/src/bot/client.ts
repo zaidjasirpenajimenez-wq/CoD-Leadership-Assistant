@@ -8,6 +8,7 @@ import {
   ChatInputCommandInteraction,
   ButtonInteraction,
   ModalSubmitInteraction,
+  StringSelectMenuInteraction,
   Interaction,
 } from "discord.js";
 import { logger } from "../lib/logger";
@@ -17,7 +18,7 @@ import { registerSentinel } from "./modules/sentinel";
 import { registerVerificationListener } from "./modules/sweeperCommands";
 
 import { modCommandDefs, handleModCommand } from "./modules/modCommands";
-import { warCommandDefs, handleWarCommand, handleAlertButton } from "./modules/warCommands";
+import { warCommandDefs, handleWarCommand, handleAlertButton, handleAlertClose, handleAlertConfirmSelect } from "./modules/warCommands";
 import { resourceCommandDefs, handleResourceCommand, handleResourceButton } from "./modules/resourceCommands";
 import { sweeperCommandDefs, handleSweeperCommand, registerGuestRoleAssigner } from "./modules/sweeperCommands";
 import { diplomacyCommandDefs, handleDiplomacyCommand } from "./modules/diplomacyCommands";
@@ -120,6 +121,8 @@ export async function startBot(): Promise<void> {
         await handleChatCommand(interaction as ChatInputCommandInteraction);
       } else if (interaction.isButton()) {
         await handleButton(interaction as ButtonInteraction);
+      } else if (interaction.isStringSelectMenu()) {
+        await handleSelectMenu(interaction as StringSelectMenuInteraction);
       } else if (interaction.isModalSubmit()) {
         await handleModal(interaction as ModalSubmitInteraction);
       }
@@ -223,7 +226,9 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
 async function handleButton(interaction: ButtonInteraction): Promise<void> {
   const customId = interaction.customId;
 
-  if (customId.startsWith("alert_")) {
+  if (customId.startsWith("alert_close:")) {
+    await handleAlertClose(interaction);
+  } else if (customId.startsWith("alert_")) {
     await handleAlertButton(interaction);
   } else if (customId.startsWith("res_") || customId.startsWith("sres_")) {
     await handleResourceButton(interaction);
@@ -233,6 +238,14 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await handleOperationsButton(interaction);
   } else if (customId.startsWith("sos_go:")) {
     await handleSosButton(interaction);
+  }
+}
+
+async function handleSelectMenu(interaction: StringSelectMenuInteraction): Promise<void> {
+  const customId = interaction.customId;
+
+  if (customId.startsWith("alert_confirm_select:")) {
+    await handleAlertConfirmSelect(interaction);
   }
 }
 

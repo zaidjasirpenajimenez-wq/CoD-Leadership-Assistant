@@ -5,8 +5,12 @@ import {
   ButtonStyle,
   ChatInputCommandInteraction,
   EmbedBuilder,
+  PermissionFlagsBits,
   Role,
   SlashCommandBuilder,
+  StringSelectMenuBuilder,
+  StringSelectMenuInteraction,
+  StringSelectMenuOptionBuilder,
   TextChannel,
 } from "discord.js";
 import { GuildConfig, UserProfile } from "../../db/schemas";
@@ -82,12 +86,35 @@ const PRIORITY_COLOR: Record<string, number>  = { Critical: 0xed4245, High: 0xff
 const PRIORITY_EMOJI: Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
 const PRIORITY_LABEL: Record<string, string>  = { Critical: "CRÍTICO", High: "ALTO", Medium: "MEDIO", Low: "BAJO" };
 
-function buildAlertButtons(messageId: string): ActionRowBuilder<ButtonBuilder> {
-  return new ActionRowBuilder<ButtonBuilder>().addComponents(
+function buildAlertButtons(messageId: string): ActionRowBuilder<ButtonBuilder>[] {
+  const attendanceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder().setCustomId(`alert_ready:${messageId}`).setLabel("✅ En camino").setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId(`alert_no:${messageId}`).setLabel("❌ No disponible").setStyle(ButtonStyle.Danger),
     new ButtonBuilder().setCustomId(`alert_late:${messageId}`).setLabel("⏳ Llego tarde").setStyle(ButtonStyle.Secondary),
   );
+  const confirmRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`alert_close:${messageId}`)
+      .setLabel("🗡️ Confirmar Asistencia")
+      .setStyle(ButtonStyle.Primary),
+  );
+  return [attendanceRow, confirmRow];
+}
+
+function buildDisabledAlertButtons(messageId: string, confirmedCount: number): ActionRowBuilder<ButtonBuilder>[] {
+  const attendanceRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder().setCustomId(`alert_ready:${messageId}`).setLabel("✅ En camino").setStyle(ButtonStyle.Success).setDisabled(true),
+    new ButtonBuilder().setCustomId(`alert_no:${messageId}`).setLabel("❌ No disponible").setStyle(ButtonStyle.Danger).setDisabled(true),
+    new ButtonBuilder().setCustomId(`alert_late:${messageId}`).setLabel("⏳ Llego tarde").setStyle(ButtonStyle.Secondary).setDisabled(true),
+  );
+  const closedRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`alert_close:${messageId}`)
+      .setLabel(`✅ Cerrada — ${confirmedCount} confirmados`)
+      .setStyle(ButtonStyle.Success)
+      .setDisabled(true),
+  );
+  return [attendanceRow, closedRow];
 }
 
 function responderBar(count: number): string {
@@ -148,17 +175,16 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
 
       const counts = { ready: 0, late: 0, no: 0 };
       const embed  = buildAlertEmbed(priority, details, interaction.user.id, userName, userAvatar, counts);
-      const row    = buildAlertButtons("PLACEHOLDER");
       const pingContent = mentionRole ? `<@&${mentionRole.id}>` : "@here";
 
       const msg = await chan.send({
         content: pingContent,
         embeds: [embed],
-        components: [row],
+        components: buildAlertButtons("PLACEHOLDER"),
         allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: ["everyone"] },
       });
       alertResponses.set(msg.id, { ready: [], late: [], no: [], pointedUsers: new Set() });
-      await msg.edit({ components: [buildAlertButtons(msg.id)] });
+      await msg.edit({ components: buildAlertButtons(msg.id) });
       await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
 
       await recordIntel({
@@ -367,4 +393,113 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
   if (responseLabel) {
     await interaction.followUp({ content: responseLabel, ephemeral: true });
   }
+}
+
+export async function handleAlertClose(interaction: ButtonInteraction): Promise<void> {
+  if (!interaction.guild) return;
+  const [, messageId] = interaction.customId.split(":");
+  const data = alertResponses.get(messageId);
+
+  if (!data) {
+    await interaction.reply({ content: "Esta alerta ya no está activa.", ephemeral: true });
+    return;
+  }
+
+  const member = interaction.guild.members.cache.get(interaction.user.id);
+  if (!member?.permissions.has(PermissionFlagsBits.ManageGuild)) {
+    await interaction.reply({ content: "❌ Solo los oficiales (R4/R5) pueden confirmar asistencia.", ephemeral: true });
+    return;
+  }
+
+  const attendees = [...data.ready, ...data.late];
+  if (attendees.length === 0) {
+    await interaction.reply({ content: "⚠️ No hay nadie para confirmar (nadie respondió ✅ ni ⏳ todavía).", ephemeral: true });
+    return;
+  }
+
+  const guildMembers = interaction.guild.members.cache;
+  const options = attendees.slice(0, 25).map((userId) => {
+    const m = guildMembers.get(userId);
+    const name = (m?.displayName ?? userId).substring(0, 100);
+    const isLate = data.late.includes(userId);
+    return new StringSelectMenuOptionBuilder()
+      .setValue(userId)
+      .setLabel(name)
+      .setDescription(isLate ? "⏳ Llego tarde → +2 pts" : "✅ En camino → +5 pts");
+  });
+
+  const selectMenu = new StringSelectMenuBuilder()
+    .setCustomId(`alert_confirm_select:${messageId}`)
+    .setPlaceholder("Selecciona quién confirmó asistencia…")
+    .setMinValues(0)
+    .setMaxValues(options.length)
+    .addOptions(options);
+
+  const row = new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu);
+
+  await interaction.reply({
+    content:
+      `**🗡️ Confirmar asistencia de guerra**\n` +
+      `Selecciona los miembros que efectivamente participaron:\n` +
+      `> ✅ En camino confirmado → **+5 pts**\n` +
+      `> ⏳ Llego tarde confirmado → **+2 pts**`,
+    components: [row],
+    ephemeral: true,
+  });
+}
+
+export async function handleAlertConfirmSelect(interaction: StringSelectMenuInteraction): Promise<void> {
+  if (!interaction.guild) return;
+  const [, messageId] = interaction.customId.split(":");
+  const data = alertResponses.get(messageId);
+  const guildId = interaction.guild.id;
+
+  if (!data) {
+    await interaction.update({ content: "Esta alerta ya no está activa.", components: [] });
+    return;
+  }
+
+  const confirmedIds = interaction.values;
+  const guildMembers = interaction.guild.members.cache;
+  const lines: string[] = [];
+
+  for (const userId of confirmedIds) {
+    const isLate  = data.late.includes(userId);
+    const isReady = data.ready.includes(userId);
+    const pts     = isLate ? 2 : isReady ? 5 : 0;
+    if (pts === 0) continue;
+
+    try {
+      await UserProfile.findOneAndUpdate(
+        { discordId: userId, guildId },
+        { $inc: { weeklyPoints: pts, totalPoints: pts } },
+        { upsert: true, new: true, setDefaultsOnInsert: true },
+      );
+      const name = guildMembers.get(userId)?.displayName ?? `<@${userId}>`;
+      const icon = isLate ? "⏳" : "✅";
+      lines.push(`${icon} **${name}** — +${pts} pts`);
+    } catch (err) {
+      logger.error({ err }, "Failed to award war confirmation points");
+    }
+  }
+
+  const originalMsg = await interaction.channel?.messages.fetch(messageId).catch(() => null);
+  if (originalMsg) {
+    const oldEmbed = originalMsg.embeds[0];
+    if (oldEmbed) {
+      const closedEmbed = EmbedBuilder.from(oldEmbed)
+        .setColor(0x57f287)
+        .setFooter({ text: `Kingdom Guardian Pro  •  Alerta cerrada — ${confirmedIds.length} asistencia(s) confirmada(s)` });
+      await originalMsg.edit({ embeds: [closedEmbed], components: buildDisabledAlertButtons(messageId, confirmedIds.length) });
+    }
+  }
+
+  alertResponses.delete(messageId);
+
+  const summary =
+    lines.length > 0
+      ? `✅ **Asistencia confirmada:**\n${lines.join("\n")}`
+      : "⚠️ No se seleccionó ningún asistente. La alerta fue cerrada sin acreditar puntos.";
+
+  await interaction.update({ content: summary, components: [] });
 }
