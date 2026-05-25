@@ -48,6 +48,7 @@ import { timerCommandDefs, handleTimerCommand, startScheduler, startWeeklyLeader
 import { leaderboardCommandDefs, handleLeaderboardCommand } from "./modules/leaderboardCommands";
 import { statsCommandDefs, handleStatsCommand } from "./modules/statsCommands";
 import { memberCommandDefs, handleMemberCommand } from "./modules/memberCommands";
+import { startWeeklyReport } from "./modules/weeklyReport";
 
 const ALL_COMMANDS = [
   ...modCommandDefs,
@@ -115,6 +116,7 @@ export async function startBot(): Promise<void> {
     startScheduler(client);
     startWeeklyLeaderboard(client);
     startInactivityChecker(client);
+    startWeeklyReport(client);
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {

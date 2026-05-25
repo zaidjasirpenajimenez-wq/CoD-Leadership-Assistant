@@ -13,6 +13,7 @@ export interface IGuildConfig extends Document {
     modLogs?: string;
     leaderboard?: string;
     announcements?: string;
+    weeklyReport?: string;
   };
   gameServerId?: string;
   guestRoleId?: string;
@@ -36,6 +37,7 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
       modLogs: String,
       leaderboard: String,
       announcements: String,
+      weeklyReport: String,
     },
     gameServerId: { type: String, default: null },
     guestRoleId: { type: String, default: null },
@@ -239,6 +241,40 @@ const ResourceRequestLogSchema = new Schema<IResourceRequestLog>(
 export const ResourceRequestLog: Model<IResourceRequestLog> =
   mongoose.models["ResourceRequestLog"] ||
   mongoose.model<IResourceRequestLog>("ResourceRequestLog", ResourceRequestLogSchema);
+
+// ── WarAlertLog ──────────────────────────────────────────────────────────────
+export interface IWarAlertLog extends Document {
+  guildId: string;
+  priority: string;
+  details: string;
+  createdBy: string;
+  attendees: Array<{ userId: string; pts: number }>;
+  readyCount: number;
+  lateCount: number;
+  totalPts: number;
+  createdAt: Date;
+  closedAt: Date;
+}
+
+const WarAlertLogSchema = new Schema<IWarAlertLog>(
+  {
+    guildId:    { type: String, required: true, index: true },
+    priority:   { type: String, default: "Medium" },
+    details:    { type: String, default: "" },
+    createdBy:  { type: String, default: "" },
+    attendees:  [{ userId: { type: String }, pts: { type: Number } }],
+    readyCount: { type: Number, default: 0 },
+    lateCount:  { type: Number, default: 0 },
+    totalPts:   { type: Number, default: 0 },
+    createdAt:  { type: Date, default: Date.now },
+    closedAt:   { type: Date, default: Date.now },
+  },
+  { strict: true },
+);
+
+export const WarAlertLog: Model<IWarAlertLog> =
+  mongoose.models["WarAlertLog"] ||
+  mongoose.model<IWarAlertLog>("WarAlertLog", WarAlertLogSchema);
 
 // ── ScheduledTimer ───────────────────────────────────────────────────────────
 export interface IScheduledTimer extends Document {

@@ -15,7 +15,7 @@ import {
   UserSelectMenuBuilder,
   UserSelectMenuInteraction,
 } from "discord.js";
-import { GuildConfig, UserProfile } from "../../db/schemas";
+import { GuildConfig, UserProfile, WarAlertLog } from "../../db/schemas";
 import { recordIntel } from "../intel";
 import { logger } from "../../lib/logger";
 
@@ -72,6 +72,13 @@ export const warCommandDefs = [
             ),
         )
         .addRoleOption((o) => o.setName("mencionar").setDescription("Rol a pingear con la orden").setRequired(false)),
+    )
+    .addSubcommand((s) =>
+      s.setName("history")
+        .setDescription("Ver historial de alertas de guerra cerradas")
+        .addIntegerOption((o) =>
+          o.setName("limite").setDescription("Cantidad a mostrar (máx 15, por defecto 10)").setRequired(false).setMinValue(1).setMaxValue(15),
+        ),
     ),
 ].map((b) => b.toJSON());
 
@@ -80,6 +87,11 @@ interface AlertData {
   late: string[];
   no: string[];
   pointedUsers: Set<string>;
+  priority: string;
+  details: string;
+  guildId: string;
+  createdBy: string;
+  createdAt: Date;
 }
 
 const alertResponses = new Map<string, AlertData>();
@@ -185,7 +197,12 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         components: buildAlertButtons("PLACEHOLDER"),
         allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: ["everyone"] },
       });
-      alertResponses.set(msg.id, { ready: [], late: [], no: [], pointedUsers: new Set() });
+      alertResponses.set(msg.id, {
+        ready: [], late: [], no: [], pointedUsers: new Set(),
+        priority, details, guildId,
+        createdBy: interaction.user.id,
+        createdAt: new Date(),
+      });
       await msg.edit({ components: buildAlertButtons(msg.id) });
       await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
 
@@ -298,6 +315,52 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         details: `Estructura: ${estructura} | Capitán: ${capitan} | Prioridad: ${priority}`,
         reportedBy: interaction.user.id,
       });
+
+    } else if (sub === "history") {
+      await interaction.deferReply({ ephemeral: true });
+      const limite = interaction.options.getInteger("limite") ?? 10;
+
+      const logs = await WarAlertLog.find({ guildId })
+        .sort({ closedAt: -1 })
+        .limit(limite)
+        .lean();
+
+      if (logs.length === 0) {
+        await interaction.editReply({ content: "📭 No hay alertas de guerra cerradas registradas todavía." });
+        return;
+      }
+
+      const PRIO_EMOJI: Record<string, string> = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
+
+      const lines = logs.map((log, i) => {
+        const date  = `<t:${Math.floor(new Date(log.closedAt).getTime() / 1000)}:d>`;
+        const pEmoji = PRIO_EMOJI[log.priority] ?? "⚔️";
+        const by    = log.createdBy ? ` · <@${log.createdBy}>` : "";
+        return (
+          `${pEmoji} **#${i + 1}** ${date} — ${log.priority.toUpperCase()}${by}\n` +
+          `> 📋 ${log.details.substring(0, 60)}${log.details.length > 60 ? "…" : ""}\n` +
+          `> ✅ ${log.readyCount} en camino · ⏳ ${log.lateCount} tarde · 🏅 ${log.totalPts} pts`
+        );
+      });
+
+      const totalAlerts = await WarAlertLog.countDocuments({ guildId });
+      const totalPtsAll = await WarAlertLog.aggregate<{ total: number }>([
+        { $match: { guildId } },
+        { $group: { _id: null, total: { $sum: "$totalPts" } } },
+      ]).then((r) => r[0]?.total ?? 0);
+
+      const embed = new EmbedBuilder()
+        .setTitle("⚔️ Historial de alertas de guerra")
+        .setColor(0xed4245)
+        .setDescription(lines.join("\n\n"))
+        .addFields(
+          { name: "📊 Alertas totales",      value: `**${totalAlerts}**`,  inline: true },
+          { name: "🏅 Puntos repartidos",    value: `**${totalPtsAll}**`,  inline: true },
+        )
+        .setFooter({ text: `Mostrando las últimas ${logs.length} alertas · Kingdom Guardian Pro` })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
     }
   } catch (err) {
     logger.error({ err, sub }, "War command error");
@@ -534,6 +597,24 @@ export async function handleAlertConfirmSelect(interaction: StringSelectMenuInte
       await originalMsg.edit({ embeds: [closedEmbed], components: buildDisabledAlertButtons(messageId, confirmedIds.length) });
     }
   }
+
+  const attendeeLog = confirmedIds
+    .filter((id) => data.late.includes(id) || data.ready.includes(id))
+    .map((id) => ({ userId: id, pts: data.late.includes(id) ? 2 : 5 }));
+  const totalPts = attendeeLog.reduce((s, a) => s + a.pts, 0);
+
+  WarAlertLog.create({
+    guildId:    data.guildId,
+    priority:   data.priority,
+    details:    data.details,
+    createdBy:  data.createdBy,
+    attendees:  attendeeLog,
+    readyCount: attendeeLog.filter((a) => a.pts === 5).length,
+    lateCount:  attendeeLog.filter((a) => a.pts === 2).length,
+    totalPts,
+    createdAt:  data.createdAt,
+    closedAt:   new Date(),
+  }).catch((err) => logger.error({ err }, "Failed to save WarAlertLog"));
 
   alertResponses.delete(messageId);
 

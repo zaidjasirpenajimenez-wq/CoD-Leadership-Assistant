@@ -34,7 +34,8 @@ export const setupCommandDefs = [
         .addChannelOption((o) => o.setName("player_verification").setDescription("Canal #player-verification"))
         .addChannelOption((o) => o.setName("mod_logs").setDescription("Canal #mod-logs"))
         .addChannelOption((o) => o.setName("leaderboard").setDescription("Canal #leaderboard"))
-        .addChannelOption((o) => o.setName("announcements").setDescription("Canal #announcements")),
+        .addChannelOption((o) => o.setName("announcements").setDescription("Canal #announcements"))
+        .addChannelOption((o) => o.setName("weekly_report").setDescription("Canal donde se publica el reporte semanal automático (domingos)")),
     )
     .addSubcommand((s) =>
       s
@@ -108,24 +109,26 @@ export async function handleSetupCommand(
       });
 
     } else if (sub === "channels") {
-      const warAlerts        = interaction.options.getChannel("war_alerts")?.id;
-      const attackOrders     = interaction.options.getChannel("attack_orders")?.id;
-      const defenseOrders    = interaction.options.getChannel("defense_orders")?.id;
-      const resourceRequests = interaction.options.getChannel("resource_requests")?.id;
+      const warAlerts          = interaction.options.getChannel("war_alerts")?.id;
+      const attackOrders       = interaction.options.getChannel("attack_orders")?.id;
+      const defenseOrders      = interaction.options.getChannel("defense_orders")?.id;
+      const resourceRequests   = interaction.options.getChannel("resource_requests")?.id;
       const playerVerification = interaction.options.getChannel("player_verification")?.id;
-      const modLogs          = interaction.options.getChannel("mod_logs")?.id;
-      const leaderboard      = interaction.options.getChannel("leaderboard")?.id;
-      const announcements    = interaction.options.getChannel("announcements")?.id;
+      const modLogs            = interaction.options.getChannel("mod_logs")?.id;
+      const leaderboard        = interaction.options.getChannel("leaderboard")?.id;
+      const announcements      = interaction.options.getChannel("announcements")?.id;
+      const weeklyReport       = interaction.options.getChannel("weekly_report")?.id;
 
       const update: Record<string, string> = {};
-      if (warAlerts)         update["channels.warAlerts"]        = warAlerts;
-      if (attackOrders)      update["channels.attackOrders"]     = attackOrders;
-      if (defenseOrders)     update["channels.defenseOrders"]    = defenseOrders;
-      if (resourceRequests)  update["channels.resourceRequests"] = resourceRequests;
-      if (playerVerification) update["channels.playerVerification"] = playerVerification;
-      if (modLogs)           update["channels.modLogs"]          = modLogs;
-      if (leaderboard)       update["channels.leaderboard"]      = leaderboard;
-      if (announcements)     update["channels.announcements"]    = announcements;
+      if (warAlerts)           update["channels.warAlerts"]          = warAlerts;
+      if (attackOrders)        update["channels.attackOrders"]       = attackOrders;
+      if (defenseOrders)       update["channels.defenseOrders"]      = defenseOrders;
+      if (resourceRequests)    update["channels.resourceRequests"]   = resourceRequests;
+      if (playerVerification)  update["channels.playerVerification"] = playerVerification;
+      if (modLogs)             update["channels.modLogs"]            = modLogs;
+      if (leaderboard)         update["channels.leaderboard"]        = leaderboard;
+      if (announcements)       update["channels.announcements"]      = announcements;
+      if (weeklyReport)        update["channels.weeklyReport"]       = weeklyReport;
 
       await GuildConfig.findOneAndUpdate(
         { guildId },
@@ -135,14 +138,15 @@ export async function handleSetupCommand(
 
       const updated = Object.keys(update).length;
       const chanList = [
-        warAlerts        ? `🚨 War Alerts → <#${warAlerts}>`              : null,
-        attackOrders     ? `⚔️ Attack Orders → <#${attackOrders}>`        : null,
-        defenseOrders    ? `🛡️ Defense Orders → <#${defenseOrders}>`      : null,
-        resourceRequests ? `📦 Resource Requests → <#${resourceRequests}>` : null,
-        playerVerification ? `🔍 Verificación → <#${playerVerification}>` : null,
-        modLogs          ? `📋 Mod Logs → <#${modLogs}>`                  : null,
-        leaderboard      ? `🏆 Leaderboard → <#${leaderboard}>`           : null,
-        announcements    ? `📢 Announcements → <#${announcements}>`        : null,
+        warAlerts          ? `🚨 War Alerts → <#${warAlerts}>`                : null,
+        attackOrders       ? `⚔️ Attack Orders → <#${attackOrders}>`          : null,
+        defenseOrders      ? `🛡️ Defense Orders → <#${defenseOrders}>`        : null,
+        resourceRequests   ? `📦 Resource Requests → <#${resourceRequests}>` : null,
+        playerVerification ? `🔍 Verificación → <#${playerVerification}>`     : null,
+        modLogs            ? `📋 Mod Logs → <#${modLogs}>`                    : null,
+        leaderboard        ? `🏆 Leaderboard → <#${leaderboard}>`             : null,
+        announcements      ? `📢 Announcements → <#${announcements}>`         : null,
+        weeklyReport       ? `📊 Reporte Semanal → <#${weeklyReport}>`        : null,
       ].filter(Boolean);
 
       await interaction.reply({
