@@ -288,13 +288,14 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
   const userId  = interaction.user.id;
   const guildId = interaction.guild?.id;
 
-  const wasReady = data.ready.includes(userId);
+  const wasPointed = data.pointedUsers.has(userId);
 
   data.ready = data.ready.filter((id) => id !== userId);
   data.late  = data.late.filter((id) => id !== userId);
   data.no    = data.no.filter((id) => id !== userId);
 
   let responseLabel = "";
+
   if (action === "alert_ready") {
     data.ready.push(userId);
     responseLabel = "✅ **En camino** registrado.";
@@ -311,15 +312,43 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
       } catch (err) {
         logger.error({ err }, "Failed to award war attendance points");
       }
-    } else if (wasReady) {
-      responseLabel = "✅ **En camino** — ya registrado anteriormente (sin puntos extra).";
+    } else {
+      responseLabel = "✅ **En camino** registrado.";
     }
+
   } else if (action === "alert_late") {
     data.late.push(userId);
     responseLabel = "⏳ **Llego tarde** registrado.";
+
+    if (wasPointed && guildId) {
+      data.pointedUsers.delete(userId);
+      try {
+        await UserProfile.findOneAndUpdate(
+          { discordId: userId, guildId },
+          { $inc: { weeklyPoints: -3, totalPoints: -3 } },
+          { upsert: false },
+        );
+      } catch (err) {
+        logger.error({ err }, "Failed to deduct war points on status change");
+      }
+    }
+
   } else if (action === "alert_no") {
     data.no.push(userId);
     responseLabel = "❌ **No disponible** registrado.";
+
+    if (wasPointed && guildId) {
+      data.pointedUsers.delete(userId);
+      try {
+        await UserProfile.findOneAndUpdate(
+          { discordId: userId, guildId },
+          { $inc: { weeklyPoints: -3, totalPoints: -3 } },
+          { upsert: false },
+        );
+      } catch (err) {
+        logger.error({ err }, "Failed to deduct war points on status change");
+      }
+    }
   }
 
   const oldEmbed = interaction.message.embeds[0];
