@@ -9,7 +9,7 @@ import {
   SlashCommandBuilder,
   TextChannel,
 } from "discord.js";
-import { GuildConfig } from "../../db/schemas";
+import { GuildConfig, UserProfile } from "../../db/schemas";
 import { recordIntel } from "../intel";
 import { logger } from "../../lib/logger";
 
@@ -69,7 +69,14 @@ export const warCommandDefs = [
     ),
 ].map((b) => b.toJSON());
 
-const alertResponses = new Map<string, { ready: string[]; late: string[]; no: string[] }>();
+interface AlertData {
+  ready: string[];
+  late: string[];
+  no: string[];
+  pointedUsers: Set<string>;
+}
+
+const alertResponses = new Map<string, AlertData>();
 
 const PRIORITY_COLOR: Record<string, number>  = { Critical: 0xed4245, High: 0xff7b00, Medium: 0xfee75c, Low: 0x57f287 };
 const PRIORITY_EMOJI: Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
@@ -150,7 +157,7 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         components: [row],
         allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: ["everyone"] },
       });
-      alertResponses.set(msg.id, { ready: [], late: [], no: [] });
+      alertResponses.set(msg.id, { ready: [], late: [], no: [], pointedUsers: new Set() });
       await msg.edit({ components: [buildAlertButtons(msg.id)] });
       await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
 
@@ -278,14 +285,42 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
     return;
   }
 
-  const userId = interaction.user.id;
+  const userId  = interaction.user.id;
+  const guildId = interaction.guild?.id;
+
+  const wasReady = data.ready.includes(userId);
+
   data.ready = data.ready.filter((id) => id !== userId);
   data.late  = data.late.filter((id) => id !== userId);
   data.no    = data.no.filter((id) => id !== userId);
 
-  if (action === "alert_ready") data.ready.push(userId);
-  else if (action === "alert_late") data.late.push(userId);
-  else if (action === "alert_no") data.no.push(userId);
+  let responseLabel = "";
+  if (action === "alert_ready") {
+    data.ready.push(userId);
+    responseLabel = "✅ **En camino** registrado.";
+
+    if (!data.pointedUsers.has(userId) && guildId) {
+      data.pointedUsers.add(userId);
+      try {
+        await UserProfile.findOneAndUpdate(
+          { discordId: userId, guildId },
+          { $inc: { weeklyPoints: 3, totalPoints: 3 } },
+          { upsert: true, new: true, setDefaultsOnInsert: true },
+        );
+        responseLabel += " +3 pts acreditados 🏅";
+      } catch (err) {
+        logger.error({ err }, "Failed to award war attendance points");
+      }
+    } else if (wasReady) {
+      responseLabel = "✅ **En camino** — ya registrado anteriormente (sin puntos extra).";
+    }
+  } else if (action === "alert_late") {
+    data.late.push(userId);
+    responseLabel = "⏳ **Llego tarde** registrado.";
+  } else if (action === "alert_no") {
+    data.no.push(userId);
+    responseLabel = "❌ **No disponible** registrado.";
+  }
 
   const oldEmbed = interaction.message.embeds[0];
   if (!oldEmbed) return;
@@ -300,4 +335,7 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
   );
 
   await interaction.update({ embeds: [updated] });
+  if (responseLabel) {
+    await interaction.followUp({ content: responseLabel, ephemeral: true });
+  }
 }

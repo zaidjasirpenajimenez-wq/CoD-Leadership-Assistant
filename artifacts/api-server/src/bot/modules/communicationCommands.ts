@@ -326,4 +326,4 @@ export async function handleCommunicationButton(
 }
 
 // No-op export kept for compatibility with client.ts modal handler router
-export async function handleCommunicationModal(): Promise<void> { return; }
+export async function handleCommunicationModal(_interaction: import("discord.js").ModalSubmitInteraction): Promise<void> { return; }

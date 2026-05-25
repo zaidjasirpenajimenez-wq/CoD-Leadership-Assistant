@@ -49,8 +49,9 @@ interface RequestData {
   requesterName: string;
 }
 
-const activeRequests  = new Map<string, RequestData>();
+const activeRequests    = new Map<string, RequestData>();
 const userActiveRequest = new Map<string, string>();
+const processingConfirm = new Set<string>();
 
 const PROPOSITO_EMOJI: Record<string, string> = {
   "Entrenar tropas": "⚔️",
@@ -212,7 +213,7 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
 
   if (action === "sres_help") {
     if (!data) { await interaction.reply({ content: "Esta solicitud ya no existe.", ephemeral: true }); return; }
-    if (data.donorId) { await interaction.reply({ content: "⚠️ Esta solicitud ya fue aceptada por otro jugador.", ephemeral: true }); return; }
+    if (data.donorId) { await interaction.reply({ content: "⚠️ Ya hay un jugador que se encargará de enviar estos recursos.", ephemeral: true }); return; }
     if (data.requesterId === userId) { await interaction.reply({ content: "❌ No puedes ayudarte a ti mismo.", ephemeral: true }); return; }
 
     data.donorId = userId;
@@ -221,9 +222,13 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
     const updated  = EmbedBuilder.from(oldEmbed)
       .setColor(0x5865f2)
       .spliceFields(oldEmbed.fields.findIndex((f) => f.name === "📊 Estado"), 1,
-        { name: "📊 Estado", value: `🔵 <@${userId}> está enviando los recursos\n*<@${data.requesterId}> confirma cuando los recibas*`, inline: false });
+        { name: "📊 Estado", value: `🔵 <@${userId}> está enviando los recursos\n*<@${data.requesterId}> — confirma la recepción con el botón de abajo*`, inline: false });
 
     await interaction.update({ embeds: [updated], components: [buildWaitingConfirmButtons(messageId)] });
+    await interaction.followUp({
+      content: `⏳ **Esperando confirmación** de <@${data.requesterId}>.\nLos puntos se acreditarán automáticamente cuando confirme haber recibido los recursos.`,
+      ephemeral: true,
+    });
     return;
   }
 
@@ -231,6 +236,11 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
     if (!data) { await interaction.reply({ content: "Esta solicitud ya fue cerrada.", ephemeral: true }); return; }
     if (data.requesterId !== userId) { await interaction.reply({ content: "❌ Solo el solicitante puede confirmar la recepción.", ephemeral: true }); return; }
     if (!data.donorId) { await interaction.reply({ content: "⚠️ Nadie ha aceptado tu solicitud todavía.", ephemeral: true }); return; }
+
+    if (processingConfirm.has(messageId)) {
+      await interaction.reply({ content: "⏳ La confirmación ya está siendo procesada.", ephemeral: true }); return;
+    }
+    processingConfirm.add(messageId);
 
     try {
       await UserProfile.findOneAndUpdate(
@@ -254,6 +264,7 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
 
     userActiveRequest.delete(`${guildId}:${data.requesterId}`);
     activeRequests.delete(messageId);
+    processingConfirm.delete(messageId);
     return;
   }
 }
