@@ -29,7 +29,7 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
   - `modules/sentinel.ts` — Anti-raid, anti-spam, anti-links
   - `modules/modCommands.ts` — /mod ban/kick/mute/warn/clear
   - `modules/warCommands.ts` — /war alert/attack/defense + intel backdoor
-  - `modules/resourceCommands.ts` — /request resources (OCR hospital)
+  - `modules/resourceCommands.ts` — /request resources (propósito + cantidades de Madera/Piedra/Oro)
   - `modules/sweeperCommands.ts` — /roster sweep + #player-verification listener
   - `modules/diplomacyCommands.ts` — /diplomacy radar/add
   - `modules/setupCommands.ts` — /setup alliance/channels/status
