@@ -35,7 +35,9 @@ export const setupCommandDefs = [
         .addChannelOption((o) => o.setName("mod_logs").setDescription("Canal #mod-logs"))
         .addChannelOption((o) => o.setName("leaderboard").setDescription("Canal #leaderboard"))
         .addChannelOption((o) => o.setName("announcements").setDescription("Canal #announcements"))
-        .addChannelOption((o) => o.setName("weekly_report").setDescription("Canal donde se publica el reporte semanal automático (domingos)")),
+        .addChannelOption((o) => o.setName("weekly_report").setDescription("Canal donde se publica el reporte semanal automático (domingos)"))
+        .addChannelOption((o) => o.setName("spy_reports").setDescription("Canal privado para alertas de espías y lista negra (solo R4/R5)"))
+        .addChannelOption((o) => o.setName("eventos").setDescription("Canal donde se publican los eventos con botones RSVP")),
     )
     .addSubcommand((s) =>
       s
@@ -118,6 +120,8 @@ export async function handleSetupCommand(
       const leaderboard        = interaction.options.getChannel("leaderboard")?.id;
       const announcements      = interaction.options.getChannel("announcements")?.id;
       const weeklyReport       = interaction.options.getChannel("weekly_report")?.id;
+      const spyReports         = interaction.options.getChannel("spy_reports")?.id;
+      const eventos            = interaction.options.getChannel("eventos")?.id;
 
       const update: Record<string, string> = {};
       if (warAlerts)           update["channels.warAlerts"]          = warAlerts;
@@ -129,6 +133,8 @@ export async function handleSetupCommand(
       if (leaderboard)         update["channels.leaderboard"]        = leaderboard;
       if (announcements)       update["channels.announcements"]      = announcements;
       if (weeklyReport)        update["channels.weeklyReport"]       = weeklyReport;
+      if (spyReports)          update["channels.spyReports"]         = spyReports;
+      if (eventos)             update["channels.eventos"]            = eventos;
 
       await GuildConfig.findOneAndUpdate(
         { guildId },
@@ -147,6 +153,8 @@ export async function handleSetupCommand(
         leaderboard        ? `🏆 Leaderboard → <#${leaderboard}>`             : null,
         announcements      ? `📢 Announcements → <#${announcements}>`         : null,
         weeklyReport       ? `📊 Reporte Semanal → <#${weeklyReport}>`        : null,
+        spyReports         ? `🕵️ Spy Reports → <#${spyReports}>`              : null,
+        eventos            ? `📅 Eventos → <#${eventos}>`                      : null,
       ].filter(Boolean);
 
       await interaction.reply({

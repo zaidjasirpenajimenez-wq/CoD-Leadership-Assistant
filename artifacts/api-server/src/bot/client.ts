@@ -49,6 +49,14 @@ import { leaderboardCommandDefs, handleLeaderboardCommand } from "./modules/lead
 import { statsCommandDefs, handleStatsCommand } from "./modules/statsCommands";
 import { memberCommandDefs, handleMemberCommand } from "./modules/memberCommands";
 import { startWeeklyReport } from "./modules/weeklyReport";
+// ── New Tier 1 & 2 modules ────────────────────────────────────────────────────
+import { spyCommandDefs, handleSpyCommand, handleSpyModal, handleSpyButton } from "./modules/spyCommands";
+import { blacklistCommandDefs, handleBlacklistCommand } from "./modules/blacklistCommands";
+import { eventoCommandDefs, handleEventoCommand, handleEventoButton, startEventoScheduler } from "./modules/eventoCommands";
+import { misionCommandDefs, handleMisionCommand } from "./modules/misionCommands";
+import { pollCommandDefs, handlePollCommand, handlePollButton, startPollScheduler } from "./modules/pollCommands";
+import { kvkCommandDefs, handleKvkCommand } from "./modules/kvkCommands";
+import { rallyCommandDefs, handleRallyCommand, handleRallyButton } from "./modules/rallyCommands";
 
 const ALL_COMMANDS = [
   ...modCommandDefs,
@@ -67,6 +75,14 @@ const ALL_COMMANDS = [
   ...statsCommandDefs,
   ...memberCommandDefs,
   ...donateCommandDefs,
+  // New
+  ...spyCommandDefs,
+  ...blacklistCommandDefs,
+  ...eventoCommandDefs,
+  ...misionCommandDefs,
+  ...pollCommandDefs,
+  ...kvkCommandDefs,
+  ...rallyCommandDefs,
 ];
 
 let discordClient: Client | null = null;
@@ -112,11 +128,13 @@ export async function startBot(): Promise<void> {
       logger.error({ err }, "Failed to register slash commands");
     }
 
-    // Start lightweight background schedulers
+    // Start background schedulers
     startScheduler(client);
     startWeeklyLeaderboard(client);
     startInactivityChecker(client);
     startWeeklyReport(client);
+    startEventoScheduler(client);
+    startPollScheduler(client);
   });
 
   client.on(Events.InteractionCreate, async (interaction: Interaction) => {
@@ -159,13 +177,15 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
   const { commandName } = interaction;
 
   switch (commandName) {
-    // ── Original modules ──────────────────────────────────────────────────
+    // ── Moderación ────────────────────────────────────────────────────────
     case "mod":
       await handleModCommand(interaction);
       break;
+    // ── Guerra ────────────────────────────────────────────────────────────
     case "war":
       await handleWarCommand(interaction);
       break;
+    // ── Recursos ─────────────────────────────────────────────────────────
     case "request":
       if (interaction.options.getSubcommand() === "history") {
         await handleResourceHistory(interaction);
@@ -173,28 +193,34 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
         await handleResourceCommand(interaction);
       }
       break;
+    case "donate":
+      await handleDonateCommand(interaction);
+      break;
+    // ── Roster ────────────────────────────────────────────────────────────
     case "roster":
       await handleSweeperCommand(interaction);
       break;
+    // ── Diplomacia ────────────────────────────────────────────────────────
     case "diplomacy":
       await handleDiplomacyCommand(interaction);
       break;
+    // ── Configuración ─────────────────────────────────────────────────────
     case "setup":
       await handleSetupCommand(interaction);
       break;
-    // ── Communication ─────────────────────────────────────────────────────
+    // ── Comunicación ──────────────────────────────────────────────────────
     case "announcement":
       await handleAnnouncementCommand(interaction);
       break;
     case "event":
       await handleEventCommand(interaction);
       break;
-    // ── Operations ────────────────────────────────────────────────────────
+    // ── Operaciones ───────────────────────────────────────────────────────
     case "raid":
     case "building":
       await handleOperationsCommand(interaction);
       break;
-    // ── Points ────────────────────────────────────────────────────────────
+    // ── Puntos y perfil ───────────────────────────────────────────────────
     case "perfil":
       await handlePerfilCommand(interaction);
       break;
@@ -204,15 +230,15 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "box":
       await handleBoxCommand(interaction);
       break;
-    // ── Libro de Sanciones ────────────────────────────────────────────────
+    // ── Sanciones ─────────────────────────────────────────────────────────
     case "sanction":
       await handleSanctionCommand(interaction);
       break;
-    // ── SOS Emergencia ────────────────────────────────────────────────────
+    // ── SOS ───────────────────────────────────────────────────────────────
     case "sos":
       await handleSosCommand(interaction);
       break;
-    // ── Timers / Recordatorios ────────────────────────────────────────────
+    // ── Timers ────────────────────────────────────────────────────────────
     case "timer":
       await handleTimerCommand(interaction);
       break;
@@ -220,17 +246,38 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "leaderboard":
       await handleLeaderboardCommand(interaction);
       break;
-    // ── Estadísticas globales ─────────────────────────────────────────────
+    // ── Estadísticas ──────────────────────────────────────────────────────
     case "stats":
       await handleStatsCommand(interaction);
       break;
-    // ── Gestión de miembros ───────────────────────────────────────────────
+    // ── Miembros ──────────────────────────────────────────────────────────
     case "member":
       await handleMemberCommand(interaction);
       break;
-    // ── Donaciones ────────────────────────────────────────────────────────
-    case "donate":
-      await handleDonateCommand(interaction);
+    // ── KVK ───────────────────────────────────────────────────────────────
+    case "kvk":
+      await handleKvkCommand(interaction);
+      break;
+    // ── Rally ─────────────────────────────────────────────────────────────
+    case "rally":
+      await handleRallyCommand(interaction);
+      break;
+    // ── Tier 1: Inteligencia ──────────────────────────────────────────────
+    case "spy":
+      await handleSpyCommand(interaction);
+      break;
+    case "blacklist":
+      await handleBlacklistCommand(interaction);
+      break;
+    // ── Tier 2: Eventos, Misiones, Polls ──────────────────────────────────
+    case "evento":
+      await handleEventoCommand(interaction);
+      break;
+    case "mision":
+      await handleMisionCommand(interaction);
+      break;
+    case "poll":
+      await handlePollCommand(interaction);
       break;
     default:
       await interaction.reply({ content: "Comando no reconocido.", ephemeral: true });
@@ -247,11 +294,22 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
   } else if (customId.startsWith("res_") || customId.startsWith("sres_")) {
     await handleResourceButton(interaction);
   } else if (customId.startsWith("ann_") || customId.startsWith("evt_")) {
-    await handleCommunicationButton(interaction);
+    // evt_ prefix used by both communicationCommands and eventoCommands — disambiguate
+    if (customId.startsWith("evt_yes:") || customId.startsWith("evt_maybe:") || customId.startsWith("evt_no:")) {
+      await handleEventoButton(interaction);
+    } else {
+      await handleCommunicationButton(interaction);
+    }
   } else if (customId.startsWith("raid_") || customId.startsWith("build_")) {
     await handleOperationsButton(interaction);
   } else if (customId.startsWith("sos_go:")) {
     await handleSosButton(interaction);
+  } else if (customId.startsWith("rally_")) {
+    await handleRallyButton(interaction);
+  } else if (customId.startsWith("spy_inv:") || customId.startsWith("spy_confirm:") || customId.startsWith("spy_clear:")) {
+    await handleSpyButton(interaction);
+  } else if (customId.startsWith("poll_vote:")) {
+    await handlePollButton(interaction);
   }
 }
 
@@ -277,5 +335,7 @@ async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
     interaction.customId === "modal_event"
   ) {
     await handleCommunicationModal(interaction);
+  } else if (interaction.customId === "spy_report_modal") {
+    await handleSpyModal(interaction);
   }
 }

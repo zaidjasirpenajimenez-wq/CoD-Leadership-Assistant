@@ -9,6 +9,7 @@ import {
   Message,
 } from "discord.js";
 import { UserProfile, GuildConfig } from "../../db/schemas";
+import { checkBlacklist } from "./blacklistCommands";
 import { processImageOcr, parseProfileFromText } from "../ocr";
 import { logger } from "../../lib/logger";
 
@@ -149,6 +150,58 @@ export function registerVerificationListener(client: Client): void {
 
       const guildId = message.guild.id;
       const discordId = message.author.id;
+
+      // ── Blacklist check — alert R5 silently if IGN is banned ─────────────
+      if (profile.ign) {
+        const banned = await checkBlacklist(guildId, profile.ign);
+        if (banned) {
+          const alertChanId = config.channels?.spyReports ?? config.channels?.modLogs;
+          const alertChan = alertChanId
+            ? (message.guild.channels.cache.get(alertChanId) as TextChannel | undefined)
+            : undefined;
+          if (alertChan) {
+            await alertChan.send({
+              embeds: [
+                new EmbedBuilder()
+                  .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+                  .setTitle("🚫 ALERTA — IGN EN LISTA NEGRA INTENTÓ VERIFICARSE")
+                  .setColor(0xed4245)
+                  .setDescription(
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `Un jugador en la lista negra intentó ingresar al servidor.\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                  )
+                  .addFields(
+                    { name: "🗡️ IGN detectado",  value: `**${profile.ign}**`,           inline: true },
+                    { name: "👤 Discord",         value: `<@${discordId}>`,               inline: true },
+                    { name: "📋 Motivo del ban",  value: banned.reason,                   inline: true },
+                    ...(banned.notes ? [{ name: "📝 Notas", value: banned.notes, inline: false }] : []),
+                    { name: "👮 Agregado por",    value: `<@${banned.addedBy}>`,          inline: true },
+                  )
+                  .setTimestamp()
+                  .setFooter({ text: "Kingdom Guardian Pro — Lista Negra · Verificación bloqueada silenciosamente" }),
+              ],
+            }).catch(() => {});
+          }
+          // Silently reject — tell user their profile couldn't be verified without revealing why
+          await message.reply({
+            embeds: [
+              new EmbedBuilder()
+                .setTitle("❌ Verificación No Completada")
+                .setColor(0xed4245)
+                .setDescription(
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                  `No fue posible completar tu verificación en este momento.\n` +
+                  `Contacta a un R4/R5 si crees que esto es un error.\n` +
+                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                )
+                .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+                .setTimestamp(),
+            ],
+          }).catch(() => {});
+          return;
+        }
+      }
 
       // Check if character ID already exists (could be a different user — spy alert)
       const existing = await UserProfile.findOne({ characterId: profile.characterId });

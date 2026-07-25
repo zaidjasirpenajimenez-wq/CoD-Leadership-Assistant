@@ -14,6 +14,8 @@ export interface IGuildConfig extends Document {
     leaderboard?: string;
     announcements?: string;
     weeklyReport?: string;
+    spyReports?: string;
+    eventos?: string;
   };
   gameServerId?: string;
   guestRoleId?: string;
@@ -38,6 +40,8 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
       leaderboard: String,
       announcements: String,
       weeklyReport: String,
+      spyReports: String,
+      eventos: String,
     },
     gameServerId: { type: String, default: null },
     guestRoleId: { type: String, default: null },
@@ -303,3 +307,158 @@ const ScheduledTimerSchema = new Schema<IScheduledTimer>(
 export const ScheduledTimer: Model<IScheduledTimer> =
   mongoose.models["ScheduledTimer"] ||
   mongoose.model<IScheduledTimer>("ScheduledTimer", ScheduledTimerSchema);
+
+// ── SpyReport ─────────────────────────────────────────────────────────────────
+export interface ISpyReport extends Document {
+  guildId: string;
+  reporterId: string;
+  suspectDiscordId: string | null;
+  suspectIGN: string;
+  suspectAlliance: string | null;
+  description: string;
+  status: "open" | "investigating" | "cleared" | "confirmed";
+  reviewedBy?: string;
+  createdAt: Date;
+}
+
+const SpyReportSchema = new Schema<ISpyReport>(
+  {
+    guildId:          { type: String, required: true, index: true },
+    reporterId:       { type: String, required: true },
+    suspectDiscordId: { type: String, default: null },
+    suspectIGN:       { type: String, required: true },
+    suspectAlliance:  { type: String, default: null },
+    description:      { type: String, required: true },
+    status:           { type: String, enum: ["open", "investigating", "cleared", "confirmed"], default: "open" },
+    reviewedBy:       { type: String, default: null },
+  },
+  { timestamps: true, strict: true },
+);
+
+export const SpyReport: Model<ISpyReport> =
+  mongoose.models["SpyReport"] ||
+  mongoose.model<ISpyReport>("SpyReport", SpyReportSchema);
+
+// ── BlacklistEntry ────────────────────────────────────────────────────────────
+export interface IBlacklistEntry extends Document {
+  guildId: string;
+  ign: string;
+  reason: string;
+  notes: string;
+  addedBy: string;
+  addedAt: Date;
+}
+
+const BlacklistEntrySchema = new Schema<IBlacklistEntry>(
+  {
+    guildId: { type: String, required: true, index: true },
+    ign:     { type: String, required: true },
+    reason:  { type: String, required: true },
+    notes:   { type: String, default: "" },
+    addedBy: { type: String, required: true },
+    addedAt: { type: Date, default: Date.now },
+  },
+  { strict: true },
+);
+BlacklistEntrySchema.index({ guildId: 1, ign: 1 });
+
+export const BlacklistEntry: Model<IBlacklistEntry> =
+  mongoose.models["BlacklistEntry"] ||
+  mongoose.model<IBlacklistEntry>("BlacklistEntry", BlacklistEntrySchema);
+
+// ── AllianceEvent ─────────────────────────────────────────────────────────────
+export interface IAllianceEvent extends Document {
+  guildId: string;
+  title: string;
+  description: string;
+  tipo: string;
+  scheduledFor: Date;
+  channelId: string;
+  messageId: string;
+  createdBy: string;
+  confirmed: string[];
+  declined: string[];
+  maybe: string[];
+  reminderSent: boolean;
+  closed: boolean;
+  createdAt: Date;
+}
+
+const AllianceEventSchema = new Schema<IAllianceEvent>(
+  {
+    guildId:      { type: String, required: true, index: true },
+    title:        { type: String, required: true },
+    description:  { type: String, required: true },
+    tipo:         { type: String, default: "general" },
+    scheduledFor: { type: Date, required: true, index: true },
+    channelId:    { type: String, required: true },
+    messageId:    { type: String, required: true },
+    createdBy:    { type: String, required: true },
+    confirmed:    [{ type: String }],
+    declined:     [{ type: String }],
+    maybe:        [{ type: String }],
+    reminderSent: { type: Boolean, default: false },
+    closed:       { type: Boolean, default: false },
+  },
+  { timestamps: true, strict: true },
+);
+
+export const AllianceEvent: Model<IAllianceEvent> =
+  mongoose.models["AllianceEvent"] ||
+  mongoose.model<IAllianceEvent>("AllianceEvent", AllianceEventSchema);
+
+// ── AlliancePoll ──────────────────────────────────────────────────────────────
+export interface IAlliancePoll extends Document {
+  guildId: string;
+  question: string;
+  options: string[];
+  votes: Map<string, number>;
+  messageId: string;
+  channelId: string;
+  endsAt: Date;
+  createdBy: string;
+  closed: boolean;
+  createdAt: Date;
+}
+
+const AlliancePollSchema = new Schema<IAlliancePoll>(
+  {
+    guildId:   { type: String, required: true, index: true },
+    question:  { type: String, required: true },
+    options:   [{ type: String }],
+    votes:     { type: Map, of: Number, default: {} },
+    messageId: { type: String, required: true },
+    channelId: { type: String, required: true },
+    endsAt:    { type: Date, required: true, index: true },
+    createdBy: { type: String, required: true },
+    closed:    { type: Boolean, default: false },
+  },
+  { timestamps: true, strict: true },
+);
+
+export const AlliancePoll: Model<IAlliancePoll> =
+  mongoose.models["AlliancePoll"] ||
+  mongoose.model<IAlliancePoll>("AlliancePoll", AlliancePollSchema);
+
+// ── MissionClaim ──────────────────────────────────────────────────────────────
+export interface IMissionClaim extends Document {
+  guildId: string;
+  discordId: string;
+  weekKey: string;
+  claimedAt: Date;
+}
+
+const MissionClaimSchema = new Schema<IMissionClaim>(
+  {
+    guildId:   { type: String, required: true, index: true },
+    discordId: { type: String, required: true },
+    weekKey:   { type: String, required: true },
+    claimedAt: { type: Date, default: Date.now },
+  },
+  { strict: true },
+);
+MissionClaimSchema.index({ guildId: 1, discordId: 1, weekKey: 1 }, { unique: true });
+
+export const MissionClaim: Model<IMissionClaim> =
+  mongoose.models["MissionClaim"] ||
+  mongoose.model<IMissionClaim>("MissionClaim", MissionClaimSchema);

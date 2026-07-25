@@ -52,9 +52,15 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
 - **El Centinela**: Anti-raid (5 joins/10s quarantine), anti-spam (4 msgs/3s timeout), anti-links, /mod commands with warn accumulation (3 warns = 24h auto-timeout)
 - **Comando Táctico**: /war alert with live response buttons, /attack order (red format), /defense order (blue format), covert intel to central webhook
 - **Banco de Suministros**: /request resources with OCR hospital scan, resource request workflow with farmer assignment and receipt confirmation buttons
-- **El Sweeper**: #player-verification auto-registration via profile screenshot OCR, /roster sweep cross-reference to detect spies
+- **El Sweeper**: #player-verification auto-registration via profile screenshot OCR, /roster sweep cross-reference to detect spies. Checks blacklist automatically on OCR — blocks silently and alerts R5.
 - **Panel Diplomático**: /diplomacy add/radar for NAP, ALLY, ENEMY, BORDER pacts
 - **Dashboard Web**: Public alliance stats + hidden master intel radar (attack matrix, conflict heatmap, diplomacy aggregator, global roster)
+- **Inteligencia Activa**: /spy report (modal form → spy channel with action buttons), /spy list/update for R4/R5
+- **Lista Negra**: /blacklist add/remove/view/check — auto-blocks banned IGNs at OCR verification
+- **Eventos RSVP**: /evento crear/lista/cancelar — RSVP buttons (+10 pts on confirm), auto DM reminder 30 min before, auto-close 3h after
+- **Misiones Semanales**: /mision ver/reclamar/ranking — 3 missions (wars, donations, points), +50 pts bonus on completion, resets weekly
+- **Polls**: /poll crear/cerrar/activas — multi-option voting, auto-closes, live vote counter
+- **DM al farmer**: when farmer accepts resource request, requester gets instant DM with donor name and resource details
 
 ## User preferences
 

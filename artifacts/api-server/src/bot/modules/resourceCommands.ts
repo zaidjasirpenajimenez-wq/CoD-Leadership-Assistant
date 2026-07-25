@@ -255,6 +255,9 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
 
     data.donorId = userId;
 
+    const donorMember = interaction.guild?.members.cache.get(userId);
+    const donorName   = donorMember?.displayName ?? interaction.user.username;
+
     const oldEmbed = interaction.message.embeds[0];
     const updated  = EmbedBuilder.from(oldEmbed)
       .setColor(0x5865f2)
@@ -266,6 +269,34 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
       content: `⏳ **Esperando confirmación** de <@${data.requesterId}>.\nLos puntos se acreditarán automáticamente cuando confirme haber recibido los recursos.`,
       ephemeral: true,
     });
+
+    // 📩 DM al solicitante avisando que alguien va en camino
+    const recursos = [
+      data.madera ? `🪵 ${fmt(data.madera)} Madera` : null,
+      data.piedra ? `🪨 ${fmt(data.piedra)} Piedra` : null,
+      data.oro    ? `💰 ${fmt(data.oro)} Oro`       : null,
+    ].filter(Boolean).join(" · ");
+    interaction.client.users.fetch(data.requesterId)
+      .then((requester) =>
+        requester.send({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("📦 ¡Tus recursos están en camino!")
+              .setColor(0x5865f2)
+              .setDescription(
+                `**${donorName}** aceptó tu solicitud y está enviando los recursos ahora mismo.\n\n` +
+                `Cuando los recibas, presiona **✅ Confirmar recepción** en el mensaje del canal para acreditar los puntos a tu donante.`,
+              )
+              .addFields(
+                { name: "📦 Recursos",    value: recursos,        inline: true },
+                { name: "🤝 Donante",     value: donorName,       inline: true },
+              )
+              .setFooter({ text: "Kingdom Guardian Pro — Banco de Suministros" })
+              .setTimestamp(),
+          ],
+        }),
+      )
+      .catch(() => {}); // Silently ignore if DMs are disabled
     return;
   }
 
