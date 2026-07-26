@@ -24,6 +24,8 @@ export const pollCommandDefs = [
         .addStringOption((o: import("discord.js").SlashCommandStringOption) =>
           o.setName("pregunta").setDescription("Pregunta de la votación").setRequired(true).setMaxLength(200),
         )
+        .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion1").setDescription("Opción 1").setRequired(true).setMaxLength(80))
+        .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion2").setDescription("Opción 2").setRequired(true).setMaxLength(80))
         .addIntegerOption((o: import("discord.js").SlashCommandIntegerOption) =>
           o
             .setName("horas")
@@ -32,8 +34,6 @@ export const pollCommandDefs = [
             .setMinValue(1)
             .setMaxValue(72),
         )
-        .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion1").setDescription("Opción 1").setRequired(true).setMaxLength(80))
-        .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion2").setDescription("Opción 2").setRequired(true).setMaxLength(80))
         .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion3").setDescription("Opción 3 (opcional)").setRequired(false).setMaxLength(80))
         .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion4").setDescription("Opción 4 (opcional)").setRequired(false).setMaxLength(80))
         .addStringOption((o: import("discord.js").SlashCommandStringOption) => o.setName("opcion5").setDescription("Opción 5 (opcional)").setRequired(false).setMaxLength(80)),
