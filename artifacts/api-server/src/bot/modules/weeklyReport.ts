@@ -1,5 +1,5 @@
 import { Client, EmbedBuilder, TextChannel } from "discord.js";
-import { GuildConfig, UserProfile, ResourceRequestLog, WarAlertLog } from "../../db/schemas";
+import { GuildConfig, UserProfile } from "../../db/schemas";
 import { logger } from "../../lib/logger";
 
 function getISOWeek(d: Date): number {
@@ -13,9 +13,8 @@ function getISOWeek(d: Date): number {
 export function startWeeklyReport(client: Client): void {
   setInterval(async () => {
     const now = new Date();
-    if (now.getUTCDay() !== 0) return;
-    const hour = now.getUTCHours();
-    if (hour !== 0) return;
+    if (now.getUTCDay() !== 0) return;   // solo domingos
+    if (now.getUTCHours() !== 0) return; // 00:00 UTC = 19:00 COT
 
     const week = getISOWeek(now);
 
@@ -28,19 +27,18 @@ export function startWeeklyReport(client: Client): void {
     }
 
     for (const config of configs) {
-      // Use DB-persisted week number so restarts don't trigger duplicate reports
       if ((config as { lastWeeklyReportSent?: number | null }).lastWeeklyReportSent === week) continue;
       try {
         await GuildConfig.updateOne({ guildId: config.guildId }, { $set: { lastWeeklyReportSent: week } });
-        await generateAndPostReport(client, config.guildId, config.channels.weeklyReport!, config.allianceTag);
+        await postWeeklyTopPlayers(client, config.guildId, config.channels.weeklyReport!, config.allianceTag);
       } catch (err) {
-        logger.error({ err, guildId: config.guildId }, "Weekly report: failed to post report");
+        logger.error({ err, guildId: config.guildId }, "Weekly report: failed to post");
       }
     }
   }, 60 * 60 * 1000);
 }
 
-async function generateAndPostReport(
+async function postWeeklyTopPlayers(
   client: Client,
   guildId: string,
   channelId: string,
@@ -53,89 +51,48 @@ async function generateAndPostReport(
   const channel = guild.channels.cache.get(channelId) as TextChannel | undefined;
   if (!channel?.isTextBased()) return;
 
-  const weekStart = new Date();
-  weekStart.setUTCDate(weekStart.getUTCDate() - 7);
-  weekStart.setUTCHours(0, 0, 0, 0);
-
-  const [topPoints, topDonors, warLogs, inactiveCount, totalMembers] = await Promise.all([
-    UserProfile.find({ guildId, weeklyPoints: { $gt: 0 } })
-      .sort({ weeklyPoints: -1 })
-      .limit(5)
-      .lean(),
-    ResourceRequestLog.aggregate<{ _id: string; count: number }>([
-      { $match: { guildId, status: "done", closedAt: { $gte: weekStart } } },
-      { $group: { _id: "$donorId", count: { $sum: 1 } } },
-      { $sort: { count: -1 } },
-      { $limit: 5 },
-    ]),
-    WarAlertLog.find({ guildId, closedAt: { $gte: weekStart } }).lean(),
-    UserProfile.countDocuments({ guildId, weeklyPoints: 0 }),
-    UserProfile.countDocuments({ guildId }),
-  ]);
-
-  const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
-
-  const topPtsLines =
-    topPoints.length > 0
-      ? topPoints
-          .map((u, i) => {
-            const name = guild.members.cache.get(u.discordId)?.displayName ?? u.ign ?? "—";
-            return `${medals[i]} **${name}** — ${u.weeklyPoints} pts`;
-          })
-          .join("\n")
-      : "*Sin actividad esta semana*";
-
-  const topDonorLines =
-    topDonors.length > 0
-      ? topDonors
-          .map((d, i) => {
-            const name = guild.members.cache.get(d._id)?.displayName ?? `<@${d._id}>`;
-            return `${medals[i]} **${name}** — ${d.count} donación${d.count !== 1 ? "es" : ""}`;
-          })
-          .join("\n")
-      : "*Sin donaciones esta semana*";
-
-  const warTotal      = warLogs.length;
-  const warAttendees  = warLogs.reduce((sum, w) => sum + (w.attendees?.length ?? 0), 0);
-  const warPts        = warLogs.reduce((sum, w) => sum + (w.totalPts ?? 0), 0);
-
-  const activeCount = totalMembers - inactiveCount;
+  const top = await UserProfile.find({ guildId, weeklyPoints: { $gt: 0 } })
+    .sort({ weeklyPoints: -1 })
+    .limit(10)
+    .lean();
 
   const now = new Date();
-  const fmtDate = (d: Date) =>
-    d.toLocaleDateString("es-ES", { day: "2-digit", month: "short", timeZone: "UTC" });
-  const weekLabel = `${fmtDate(weekStart)} – ${fmtDate(now)}`;
+  const dateLabel = now.toLocaleDateString("es-ES", { weekday: "long", day: "2-digit", month: "long", timeZone: "UTC" });
 
-  const embed = new EmbedBuilder()
-    .setTitle(`📊  REPORTE SEMANAL — [${allianceTag}]`)
-    .setColor(0x5865f2)
-    .setDescription(
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `📅 **Semana:** ${weekLabel}\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-    )
-    .addFields(
-      { name: "🏆 Top 5 — Puntos semanales",    value: topPtsLines,    inline: false },
-      { name: "🤝 Top 5 — Donantes de recursos", value: topDonorLines, inline: false },
-      {
-        name:   "⚔️ Guerras esta semana",
-        value:  warTotal > 0
-          ? `**${warTotal}** alerta${warTotal !== 1 ? "s" : ""} cerrada${warTotal !== 1 ? "s" : ""} · **${warAttendees}** asistencias · **${warPts}** pts repartidos`
-          : "*Sin actividad de guerra*",
-        inline: false,
-      },
-      {
-        name:   "👥 Participación global",
-        value:  `✅ **${activeCount}** activos   ·   ⚠️ **${inactiveCount}** inactivos   ·   👤 **${totalMembers}** total`,
-        inline: false,
-      },
-    )
-    .setFooter({ text: "Kingdom Guardian Pro  •  Reporte automático semanal" })
-    .setTimestamp();
+  if (top.length === 0) {
+    await channel.send({
+      embeds: [
+        new EmbedBuilder()
+          .setTitle(`📋 TOP SEMANAL — [${allianceTag}]`)
+          .setColor(0x5865f2)
+          .setDescription(`*Sin actividad registrada este domingo.*`)
+          .setFooter({ text: "Kingdom Guardian Pro  •  Ranking dominical" })
+          .setTimestamp(),
+      ],
+    });
+    logger.info({ guildId, week: getISOWeek(now) }, "Weekly report posted (empty)");
+    return;
+  }
+
+  const medals = ["🥇", "🥈", "🥉"];
+  const lines = top.map((u, i) => {
+    const medal = medals[i] ?? `**${i + 1}.**`;
+    const name  = guild.members.cache.get(u.discordId)?.displayName ?? u.ign ?? `<@${u.discordId}>`;
+    return `${medal} **${name}** — ${u.weeklyPoints} pts`;
+  });
+
+  const winner = guild.members.cache.get(top[0].discordId)?.displayName ?? top[0].ign ?? "—";
 
   await channel.send({
-    content: "@here 📣 **¡Reporte semanal de la alianza publicado!**",
-    embeds: [embed],
+    content: `@here 🏅 **¡${winner} fue el más activo del domingo!**`,
+    embeds: [
+      new EmbedBuilder()
+        .setTitle(`📋 TOP SEMANAL — [${allianceTag}]`)
+        .setColor(0x5865f2)
+        .setDescription(`📅 **${dateLabel}**\n\n${lines.join("\n")}`)
+        .setFooter({ text: "Kingdom Guardian Pro  •  Ranking dominical" })
+        .setTimestamp(),
+    ],
     allowedMentions: { parse: ["everyone"] },
   });
 
