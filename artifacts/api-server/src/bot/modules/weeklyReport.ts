@@ -15,7 +15,7 @@ export function startWeeklyReport(client: Client): void {
     const now = new Date();
     if (now.getUTCDay() !== 0) return;
     const hour = now.getUTCHours();
-    if (hour !== 20) return;
+    if (hour !== 0) return;
 
     const week = getISOWeek(now);
 
