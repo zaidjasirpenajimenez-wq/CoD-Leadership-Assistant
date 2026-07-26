@@ -130,7 +130,7 @@ async function generateAndPostReport(
         inline: false,
       },
     )
-    .setFooter({ text: "Kingdom Guardian Pro  •  Reporte automático semanal — los puntos semanales han sido reiniciados" })
+    .setFooter({ text: "Kingdom Guardian Pro  •  Reporte automático semanal" })
     .setTimestamp();
 
   await channel.send({
@@ -139,6 +139,5 @@ async function generateAndPostReport(
     allowedMentions: { parse: ["everyone"] },
   });
 
-  await UserProfile.updateMany({ guildId }, { $set: { weeklyPoints: 0 } });
-  logger.info({ guildId, week: getISOWeek(now) }, "Weekly report posted and weekly points reset");
+  logger.info({ guildId, week: getISOWeek(now) }, "Weekly report posted");
 }

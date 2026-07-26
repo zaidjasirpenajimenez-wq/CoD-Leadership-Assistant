@@ -308,7 +308,7 @@ export function startInactivityChecker(client: Client): void {
   logger.info("Inactivity checker started (hourly)");
 }
 
-/** Auto-post weekly leaderboard every Monday 00:05 UTC and reset weekly points */
+/** Auto-post monthly leaderboard on the 1st of each month at 00:05 UTC (19:05 COT last day) and reset points */
 export function startWeeklyLeaderboard(client: Client): void {
   const CHECK_INTERVAL = 5 * 60_000; // Check every 5 minutes
 
@@ -317,26 +317,30 @@ export function startWeeklyLeaderboard(client: Client): void {
   setInterval(async () => {
     try {
       const now = new Date();
-      // Monday = 1, 00:00–00:10 UTC window
-      if (now.getUTCDay() !== 1 || now.getUTCHours() !== 0 || now.getUTCMinutes() > 9) return;
+      // 1st of month, 00:00–00:09 UTC window
+      if (now.getUTCDate() !== 1 || now.getUTCHours() !== 0 || now.getUTCMinutes() > 9) return;
 
-      const resetKey = `${now.getUTCFullYear()}-W${getWeekNumber(now)}`;
+      const resetKey = `${now.getUTCFullYear()}-${now.getUTCMonth() + 1}`;
       if (lastReset === resetKey) return;
       lastReset = resetKey;
 
       const guilds = await GuildConfig.find({}).lean();
       for (const config of guilds) {
-        await postWeeklyLeaderboard(client, config.guildId);
+        await postMonthlyLeaderboard(client, config.guildId);
       }
     } catch (err) {
-      logger.error({ err }, "Weekly leaderboard scheduler error");
+      logger.error({ err }, "Monthly leaderboard scheduler error");
     }
   }, CHECK_INTERVAL);
 
-  logger.info("Weekly leaderboard scheduler started");
+  logger.info("Monthly leaderboard scheduler started");
 }
 
 export async function postWeeklyLeaderboard(client: Client, guildId: string): Promise<void> {
+  return postMonthlyLeaderboard(client, guildId);
+}
+
+export async function postMonthlyLeaderboard(client: Client, guildId: string): Promise<void> {
   const config = await GuildConfig.findOne({ guildId }).lean();
   // Prefer dedicated leaderboard channel, fall back to modLogs
   const channelId = config?.channels?.leaderboard ?? config?.channels?.modLogs;
@@ -346,6 +350,9 @@ export async function postWeeklyLeaderboard(client: Client, guildId: string): Pr
   if (!guild) return;
   const chan = guild.channels.cache.get(channelId) as TextChannel | undefined;
   if (!chan) return;
+
+  const now = new Date();
+  const monthName = now.toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
 
   const top = await UserProfile.find({ guildId, weeklyPoints: { $gt: 0 } })
     .sort({ weeklyPoints: -1 })
@@ -357,22 +364,22 @@ export async function postWeeklyLeaderboard(client: Client, guildId: string): Pr
   const medals = ["🥇", "🥈", "🥉"];
   const lines = top.map((p, i) => {
     const m = medals[i] ?? `**${i + 1}.**`;
-    return `${m} <@${p.discordId}> — **${p.weeklyPoints}** pts semanales`;
+    return `${m} <@${p.discordId}> — **${p.weeklyPoints}** pts del mes`;
   });
 
   await chan.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle("🏆 RANKING SEMANAL — CIERRE DE SEMANA MILITAR")
+        .setTitle(`🏆 RANKING MENSUAL — CIERRE DE ${monthName.toUpperCase()}`)
         .setColor(0xffd700)
         .setDescription(lines.join("\n"))
-        .addFields({ name: "Soldados activos esta semana", value: String(top.length), inline: true })
+        .addFields({ name: "Soldados activos este mes", value: String(top.length), inline: true })
         .setTimestamp()
-        .setFooter({ text: "Kingdom Guardian Pro — Los puntos semanales serán reiniciados" }),
+        .setFooter({ text: "Kingdom Guardian Pro — Los puntos del mes han sido reiniciados" }),
     ],
   });
 
-  // Reset weekly points for all members in this guild
+  // Reset points after posting so nothing is lost
   await UserProfile.updateMany({ guildId }, { $set: { weeklyPoints: 0 } });
 }
 
