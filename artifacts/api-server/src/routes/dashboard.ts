@@ -6,6 +6,11 @@ import {
   DiplomacyPact,
   SanctionRecord,
   KvkRecord,
+  SpyReport,
+  BlacklistEntry,
+  AllianceEvent,
+  AlliancePoll,
+  MissionClaim,
 } from "../db/schemas";
 import { isMongoConnected } from "../db/mongoose";
 import { logger } from "../lib/logger";
@@ -206,6 +211,173 @@ router.get("/api/dashboard/inactivity", async (req: Request, res: Response) => {
     res.status(500).json({ error: "Internal server error" });
   }
 });
+
+// ── Admin — Spy Reports ───────────────────────────────────────────────────────
+
+router.get("/api/dashboard/spy-reports", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId, status } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (guildId) filter.guildId = guildId;
+    if (status) filter.status = status;
+    const reports = await SpyReport.find(filter).sort({ createdAt: -1 }).limit(200).lean();
+    const guilds = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    const guildMap = Object.fromEntries(guilds.map((g) => [g.guildId, g.allianceTag]));
+    res.json({ reports, guildMap });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/spy-reports error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/api/dashboard/spy-reports/:id", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const valid = ["open", "investigating", "cleared", "confirmed"];
+    const { status } = req.body as { status: string };
+    if (!valid.includes(status)) { res.status(400).json({ error: "Invalid status" }); return; }
+    const report = await SpyReport.findByIdAndUpdate(
+      req.params.id,
+      { status, reviewedBy: "admin-web" },
+      { new: true },
+    ).lean();
+    if (!report) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ ok: true, report });
+  } catch (err) {
+    logger.error({ err }, "PATCH /api/dashboard/spy-reports/:id error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Admin — Blacklist ─────────────────────────────────────────────────────────
+
+router.get("/api/dashboard/blacklist", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (guildId) filter.guildId = guildId;
+    const entries = await BlacklistEntry.find(filter).sort({ addedAt: -1 }).limit(500).lean();
+    const guilds = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    const guildMap = Object.fromEntries(guilds.map((g) => [g.guildId, g.allianceTag]));
+    res.json({ entries, guildMap });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/blacklist error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.post("/api/dashboard/blacklist", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId, ign, reason, notes } = req.body as Record<string, string>;
+    if (!guildId || !ign || !reason) { res.status(400).json({ error: "guildId, ign and reason are required" }); return; }
+    const entry = await BlacklistEntry.create({ guildId, ign: ign.trim(), reason, notes: notes ?? "", addedBy: "admin-web", addedAt: new Date() });
+    res.status(201).json({ ok: true, entry });
+  } catch (err) {
+    logger.error({ err }, "POST /api/dashboard/blacklist error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.delete("/api/dashboard/blacklist/:id", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const entry = await BlacklistEntry.findByIdAndDelete(req.params.id).lean();
+    if (!entry) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ ok: true });
+  } catch (err) {
+    logger.error({ err }, "DELETE /api/dashboard/blacklist/:id error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Admin — Events ────────────────────────────────────────────────────────────
+
+router.get("/api/dashboard/events", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (guildId) filter.guildId = guildId;
+    const events = await AllianceEvent.find(filter).sort({ scheduledFor: -1 }).limit(100).lean();
+    const guilds = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    const guildMap = Object.fromEntries(guilds.map((g) => [g.guildId, g.allianceTag]));
+    res.json({ events, guildMap });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/events error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/api/dashboard/events/:id/cancel", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const event = await AllianceEvent.findByIdAndUpdate(req.params.id, { closed: true }, { new: true }).lean();
+    if (!event) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ ok: true, event });
+  } catch (err) {
+    logger.error({ err }, "PATCH /api/dashboard/events/:id/cancel error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Admin — Polls ─────────────────────────────────────────────────────────────
+
+router.get("/api/dashboard/polls", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId } = req.query;
+    const filter: Record<string, unknown> = {};
+    if (guildId) filter.guildId = guildId;
+    const polls = await AlliancePoll.find(filter).sort({ createdAt: -1 }).limit(100).lean();
+    const guilds = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    const guildMap = Object.fromEntries(guilds.map((g) => [g.guildId, g.allianceTag]));
+    res.json({ polls, guildMap });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/polls error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+router.patch("/api/dashboard/polls/:id/close", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const poll = await AlliancePoll.findByIdAndUpdate(req.params.id, { closed: true }, { new: true }).lean();
+    if (!poll) { res.status(404).json({ error: "Not found" }); return; }
+    res.json({ ok: true, poll });
+  } catch (err) {
+    logger.error({ err }, "PATCH /api/dashboard/polls/:id/close error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Admin — Missions ──────────────────────────────────────────────────────────
+
+router.get("/api/dashboard/missions", async (req: Request, res: Response) => {
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
+  try {
+    const { guildId } = req.query;
+    const now = new Date();
+    const startOfWeek = new Date(now);
+    startOfWeek.setDate(now.getDate() - now.getDay());
+    startOfWeek.setHours(0, 0, 0, 0);
+    const weekKey = `${startOfWeek.getFullYear()}-W${String(Math.ceil(startOfWeek.getDate() / 7)).padStart(2, "0")}`;
+
+    const filter: Record<string, unknown> = { weekKey };
+    if (guildId) filter.guildId = guildId;
+    const claims = await MissionClaim.find(filter).sort({ claimedAt: -1 }).lean();
+    const guilds = await GuildConfig.find({}).select("guildId allianceTag").lean();
+    const guildMap = Object.fromEntries(guilds.map((g) => [g.guildId, g.allianceTag]));
+    res.json({ claims, weekKey, guildMap });
+  } catch (err) {
+    logger.error({ err }, "GET /api/dashboard/missions error");
+    res.status(500).json({ error: "Internal server error" });
+  }
+});
+
+// ── Overview ──────────────────────────────────────────────────────────────────
 
 router.get("/api/dashboard/overview", async (req: Request, res: Response) => {
   if (!requireMaster(req, res) || !requireMongo(res)) return;

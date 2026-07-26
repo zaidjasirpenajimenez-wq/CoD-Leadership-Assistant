@@ -56,6 +56,17 @@ async function apiFetch(path, headers = {}) {
   } catch { return null; }
 }
 
+async function apiMutation(method, path, body, headers = {}) {
+  try {
+    const r = await fetch(BASE + path, {
+      method,
+      headers: { "Content-Type": "application/json", ...headers },
+      body: body != null ? JSON.stringify(body) : undefined,
+    });
+    return { ok: r.ok, data: r.ok ? await r.json() : null };
+  } catch { return { ok: false, data: null }; }
+}
+
 function masterHeaders() {
   return { "x-master-key": MASTER_KEY };
 }
@@ -388,14 +399,356 @@ function Tabs({ tabs, active, onChange, color = "blue" }) {
   );
 }
 
+// ── Spy Reports Tab ───────────────────────────────────────────────────────────
+const SPY_STATUS = {
+  open:          { label: "Abierto",       cls: "bg-yellow-900/60 text-yellow-300 border-yellow-700" },
+  investigating: { label: "Investigando",  cls: "bg-blue-900/60 text-blue-300 border-blue-700" },
+  confirmed:     { label: "Confirmado",    cls: "bg-red-900/60 text-red-300 border-red-700" },
+  cleared:       { label: "Descartado",    cls: "bg-green-900/60 text-green-300 border-green-700" },
+};
+function SpyReportsTab({ reports: initial, guildMap }) {
+  const [reports, setReports] = useState(initial);
+  const [busy, setBusy] = useState(null);
+  const [filter, setFilter] = useState("all");
+
+  const visible = filter === "all" ? reports : reports.filter(r => r.status === filter);
+
+  async function changeStatus(id, status) {
+    setBusy(id);
+    const res = await apiMutation("PATCH", `/api/dashboard/spy-reports/${id}`, { status }, masterHeaders());
+    if (res.ok) setReports(prev => prev.map(r => r._id === id ? { ...r, status } : r));
+    setBusy(null);
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4 flex-wrap">
+        {["all","open","investigating","confirmed","cleared"].map(f => (
+          <button key={f} onClick={() => setFilter(f)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${filter===f?"bg-blue-900/40 text-blue-200 border-blue-700":"text-gray-500 border-gray-800 hover:border-gray-700"}`}>
+            {f==="all" ? "Todos" : SPY_STATUS[f]?.label}
+            <span className="ml-1.5 text-gray-600">{f==="all" ? reports.length : reports.filter(r=>r.status===f).length}</span>
+          </button>
+        ))}
+      </div>
+      {!visible.length && <Empty icon="🕵️" msg="Sin reportes con este filtro" />}
+      <div className="space-y-2">
+        {visible.map(r => {
+          const meta = SPY_STATUS[r.status] ?? SPY_STATUS.open;
+          return (
+            <div key={r._id} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex items-center gap-2 flex-wrap">
+                  <span className={`text-xs px-2 py-0.5 rounded-full border font-semibold ${meta.cls}`}>{meta.label}</span>
+                  <span className="font-semibold text-white">{r.suspectIGN}</span>
+                  {r.suspectAlliance && <span className="text-xs text-gray-500 font-mono">[{r.suspectAlliance}]</span>}
+                </div>
+                <span className="text-xs text-gray-600 shrink-0">{timeAgo(r.createdAt)}</span>
+              </div>
+              <p className="text-sm text-gray-400 mt-2 line-clamp-2">{r.description}</p>
+              <div className="flex items-center justify-between mt-3">
+                <span className="text-xs text-gray-600">Alianza: {guildMap[r.guildId] ?? r.guildId}</span>
+                <div className="flex gap-1.5 flex-wrap justify-end">
+                  {Object.entries(SPY_STATUS).filter(([k]) => k !== r.status).map(([k, v]) => (
+                    <button key={k} disabled={busy===r._id} onClick={() => changeStatus(r._id, k)}
+                      className={`text-xs px-2.5 py-1 rounded-lg border transition disabled:opacity-40 ${v.cls}`}>
+                      {busy===r._id ? "…" : v.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Blacklist Tab ─────────────────────────────────────────────────────────────
+function BlacklistTab({ entries: initial, guildMap, guilds }) {
+  const [entries, setEntries] = useState(initial);
+  const [busy, setBusy] = useState(null);
+  const [form, setForm] = useState({ guildId: guilds[0]?.guildId ?? "", ign: "", reason: "", notes: "" });
+  const [adding, setAdding] = useState(false);
+  const [err, setErr] = useState("");
+
+  async function remove(id) {
+    setBusy(id);
+    const res = await apiMutation("DELETE", `/api/dashboard/blacklist/${id}`, null, masterHeaders());
+    if (res.ok) setEntries(prev => prev.filter(e => e._id !== id));
+    setBusy(null);
+  }
+
+  async function add(e) {
+    e.preventDefault();
+    if (!form.ign || !form.reason || !form.guildId) { setErr("IGN, motivo y servidor son obligatorios"); return; }
+    setAdding(true); setErr("");
+    const res = await apiMutation("POST", "/api/dashboard/blacklist", form, masterHeaders());
+    if (res.ok) {
+      setEntries(prev => [res.data.entry, ...prev]);
+      setForm(f => ({ ...f, ign: "", reason: "", notes: "" }));
+    } else { setErr("Error al agregar la entrada"); }
+    setAdding(false);
+  }
+
+  return (
+    <div>
+      {/* Add form */}
+      <form onSubmit={add} className="bg-gray-900/60 border border-gray-800 rounded-xl p-4 mb-5">
+        <h3 className="text-sm font-semibold text-gray-300 mb-3 flex items-center gap-2">⛔ Agregar a Lista Negra</h3>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Servidor</label>
+            <select value={form.guildId} onChange={e => setForm(f => ({ ...f, guildId: e.target.value }))}
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white outline-none focus:border-red-700">
+              {guilds.map(g => <option key={g.guildId} value={g.guildId}>{guildMap[g.guildId] ?? g.guildId}</option>)}
+            </select>
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">IGN del jugador</label>
+            <input value={form.ign} onChange={e => setForm(f => ({ ...f, ign: e.target.value }))} placeholder="NombreEnJuego"
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-700 outline-none focus:border-red-700" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Motivo</label>
+            <input value={form.reason} onChange={e => setForm(f => ({ ...f, reason: e.target.value }))} placeholder="Espía confirmado, robo, etc."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-700 outline-none focus:border-red-700" />
+          </div>
+          <div>
+            <label className="text-xs text-gray-500 mb-1 block">Notas adicionales (opcional)</label>
+            <input value={form.notes} onChange={e => setForm(f => ({ ...f, notes: e.target.value }))} placeholder="Contexto extra..."
+              className="w-full bg-gray-800 border border-gray-700 rounded-lg px-3 py-2 text-sm text-white placeholder-gray-700 outline-none focus:border-red-700" />
+          </div>
+        </div>
+        {err && <p className="text-red-400 text-xs mb-2">⚠️ {err}</p>}
+        <button type="submit" disabled={adding}
+          className="bg-red-800 hover:bg-red-700 disabled:opacity-50 text-white text-sm font-semibold px-4 py-2 rounded-lg transition">
+          {adding ? "Agregando…" : "⛔ Agregar"}
+        </button>
+      </form>
+
+      {/* List */}
+      {!entries.length && <Empty icon="✅" msg="Lista negra vacía" />}
+      <div className="space-y-2">
+        {entries.map(e => (
+          <div key={e._id} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 flex items-center gap-3 hover:border-gray-700 transition">
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="font-semibold text-red-300">{e.ign}</span>
+                <span className="text-xs text-gray-500">·</span>
+                <span className="text-xs text-gray-400">{guildMap[e.guildId] ?? e.guildId}</span>
+              </div>
+              <p className="text-sm text-gray-400 mt-0.5">{e.reason}</p>
+              {e.notes && <p className="text-xs text-gray-600 mt-0.5">{e.notes}</p>}
+              <p className="text-xs text-gray-700 mt-1">Agregado {timeAgo(e.addedAt)}</p>
+            </div>
+            <button disabled={busy===e._id} onClick={() => remove(e._id)}
+              className="text-xs text-red-500 hover:text-red-400 border border-red-900 hover:border-red-700 px-3 py-1.5 rounded-lg transition disabled:opacity-40 shrink-0">
+              {busy===e._id ? "…" : "Quitar"}
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ── Events Tab ────────────────────────────────────────────────────────────────
+function EventosTab({ events: initial, guildMap }) {
+  const [events, setEvents] = useState(initial);
+  const [busy, setBusy] = useState(null);
+  const [showPast, setShowPast] = useState(false);
+
+  const now = Date.now();
+  const upcoming = events.filter(e => !e.closed && new Date(e.scheduledFor).getTime() > now);
+  const past     = events.filter(e => e.closed || new Date(e.scheduledFor).getTime() <= now);
+  const visible  = showPast ? past : upcoming;
+
+  async function cancel(id) {
+    setBusy(id);
+    const res = await apiMutation("PATCH", `/api/dashboard/events/${id}/cancel`, {}, masterHeaders());
+    if (res.ok) setEvents(prev => prev.map(e => e._id === id ? { ...e, closed: true } : e));
+    setBusy(null);
+  }
+
+  const TIPO_ICON = { guerra:"⚔️", kvk:"🌍", rally:"🏹", construccion:"🏗️", general:"📅" };
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        {[false, true].map(p => (
+          <button key={p} onClick={() => setShowPast(p)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${showPast===p?"bg-blue-900/40 text-blue-200 border-blue-700":"text-gray-500 border-gray-800 hover:border-gray-700"}`}>
+            {p ? `Pasados (${past.length})` : `Próximos (${upcoming.length})`}
+          </button>
+        ))}
+      </div>
+      {!visible.length && <Empty icon="📅" msg={showPast ? "Sin eventos pasados" : "Sin eventos próximos"} />}
+      <div className="space-y-2">
+        {visible.map(ev => {
+          const date = new Date(ev.scheduledFor);
+          const confirmed = ev.confirmed?.length ?? 0;
+          const maybe = ev.maybe?.length ?? 0;
+          const declined = ev.declined?.length ?? 0;
+          return (
+            <div key={ev._id} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-xl">{TIPO_ICON[ev.tipo] ?? "📅"}</span>
+                    <span className="font-semibold text-white">{ev.title}</span>
+                    {ev.closed && <span className="text-xs bg-gray-800 text-gray-500 border border-gray-700 px-2 py-0.5 rounded-full">Cerrado</span>}
+                  </div>
+                  <p className="text-xs text-gray-500 mt-0.5">{date.toLocaleString("es-ES")} · {guildMap[ev.guildId] ?? ev.guildId}</p>
+                </div>
+                {!ev.closed && (
+                  <button disabled={busy===ev._id} onClick={() => cancel(ev._id)}
+                    className="text-xs text-orange-500 hover:text-orange-400 border border-orange-900 hover:border-orange-700 px-3 py-1.5 rounded-lg transition disabled:opacity-40 shrink-0">
+                    {busy===ev._id ? "…" : "Cancelar"}
+                  </button>
+                )}
+              </div>
+              <p className="text-sm text-gray-400 mt-2 line-clamp-1">{ev.description}</p>
+              <div className="flex gap-4 mt-3 text-xs">
+                <span className="text-green-400">✅ {confirmed} confirmados</span>
+                <span className="text-yellow-400">🤔 {maybe} tal vez</span>
+                <span className="text-red-400">❌ {declined} no pueden</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Polls Tab ─────────────────────────────────────────────────────────────────
+function PollsTab({ polls: initial, guildMap }) {
+  const [polls, setPolls] = useState(initial);
+  const [busy, setBusy] = useState(null);
+  const [showClosed, setShowClosed] = useState(false);
+
+  const active = polls.filter(p => !p.closed);
+  const closed = polls.filter(p => p.closed);
+  const visible = showClosed ? closed : active;
+
+  async function closePoll(id) {
+    setBusy(id);
+    const res = await apiMutation("PATCH", `/api/dashboard/polls/${id}/close`, {}, masterHeaders());
+    if (res.ok) setPolls(prev => prev.map(p => p._id === id ? { ...p, closed: true } : p));
+    setBusy(null);
+  }
+
+  function voteSummary(poll) {
+    const votesObj = poll.votes instanceof Object ? poll.votes : {};
+    const counts = poll.options.map((_, i) => {
+      let total = 0;
+      Object.values(votesObj).forEach(v => { if (Number(v) === i) total++; });
+      return total;
+    });
+    const total = counts.reduce((a, b) => a + b, 0);
+    return { counts, total };
+  }
+
+  return (
+    <div>
+      <div className="flex gap-2 mb-4">
+        {[false, true].map(c => (
+          <button key={c} onClick={() => setShowClosed(c)}
+            className={`text-xs px-3 py-1.5 rounded-lg border transition font-medium ${showClosed===c?"bg-blue-900/40 text-blue-200 border-blue-700":"text-gray-500 border-gray-800 hover:border-gray-700"}`}>
+            {c ? `Cerradas (${closed.length})` : `Activas (${active.length})`}
+          </button>
+        ))}
+      </div>
+      {!visible.length && <Empty icon="🗳️" msg={showClosed ? "Sin polls cerradas" : "Sin polls activas"} />}
+      <div className="space-y-3">
+        {visible.map(poll => {
+          const { counts, total } = voteSummary(poll);
+          const winIdx = counts.indexOf(Math.max(...counts));
+          return (
+            <div key={poll._id} className="bg-gray-900/50 border border-gray-800 rounded-xl p-4 hover:border-gray-700 transition">
+              <div className="flex items-start justify-between gap-3 flex-wrap">
+                <div className="flex-1 min-w-0">
+                  <p className="font-semibold text-white">{poll.question}</p>
+                  <p className="text-xs text-gray-500 mt-0.5">
+                    {guildMap[poll.guildId] ?? poll.guildId} · {total} voto{total !== 1 ? "s" : ""} · vence {timeAgo(poll.endsAt)}
+                  </p>
+                </div>
+                {!poll.closed && (
+                  <button disabled={busy===poll._id} onClick={() => closePoll(poll._id)}
+                    className="text-xs text-yellow-500 hover:text-yellow-400 border border-yellow-900 hover:border-yellow-700 px-3 py-1.5 rounded-lg transition disabled:opacity-40 shrink-0">
+                    {busy===poll._id ? "…" : "Cerrar poll"}
+                  </button>
+                )}
+              </div>
+              <div className="mt-3 space-y-1.5">
+                {poll.options.map((opt, i) => {
+                  const pct = total > 0 ? Math.round((counts[i] / total) * 100) : 0;
+                  const isWin = !poll.closed ? false : i === winIdx;
+                  return (
+                    <div key={i}>
+                      <div className="flex justify-between text-xs mb-0.5">
+                        <span className={isWin ? "text-yellow-400 font-semibold" : "text-gray-400"}>{isWin && "🏆 "}{opt}</span>
+                        <span className="text-gray-600">{counts[i]} ({pct}%)</span>
+                      </div>
+                      <div className="h-1.5 bg-gray-800 rounded-full overflow-hidden">
+                        <div className={`h-full rounded-full transition-all pts-bar ${isWin?"bg-yellow-500":"bg-blue-700"}`} style={{ width: `${pct}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ── Missions Tab ──────────────────────────────────────────────────────────────
+function MissionsTab({ claims, weekKey, guildMap }) {
+  if (!claims.length) return <Empty icon="🎯" msg={`Sin reclamaciones esta semana (${weekKey})`} />;
+  const byGuild = {};
+  claims.forEach(c => {
+    if (!byGuild[c.guildId]) byGuild[c.guildId] = [];
+    byGuild[c.guildId].push(c);
+  });
+  return (
+    <div>
+      <p className="text-xs text-gray-500 mb-4">Semana: <span className="text-blue-400 font-mono">{weekKey}</span> · {claims.length} reclamacion{claims.length !== 1 ? "es" : ""} totales</p>
+      {Object.entries(byGuild).map(([guildId, gClaims]) => (
+        <div key={guildId} className="mb-4">
+          <p className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2">{guildMap[guildId] ?? guildId}</p>
+          <div className="space-y-1.5">
+            {gClaims.map((c, i) => (
+              <div key={i} className="bg-gray-900/50 border border-gray-800 rounded-lg px-4 py-2.5 flex items-center justify-between">
+                <span className="text-sm text-white font-mono">{c.discordId}</span>
+                <span className="text-xs text-green-400">{timeAgo(c.claimedAt)} · +50 pts</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 // ── Master Intel Panel ────────────────────────────────────────────────────────
 function MasterIntelPanel({ onLock }) {
   const [tab, setTab] = useState("overview");
   const [loading, setLoading] = useState(true);
+  const [guilds, setGuilds] = useState([]);
   const [data, setData] = useState({
     overview: null, intel: [], diplomacy: { pacts: [], guildMap: {} },
     members: [], sanctions: { sanctions: [], guildMap: {} },
     kvk: { records: [], guildMap: {} }, inactivity: { inactive: [], guildMap: {} },
+    spyReports: { reports: [], guildMap: {} },
+    blacklist: { entries: [], guildMap: {} },
+    events: { events: [], guildMap: {} },
+    polls: { polls: [], guildMap: {} },
+    missions: { claims: [], weekKey: "", guildMap: {} },
   });
 
   useEffect(() => {
@@ -408,7 +761,14 @@ function MasterIntelPanel({ onLock }) {
       apiFetch("/api/dashboard/sanctions", h),
       apiFetch("/api/dashboard/kvk", h),
       apiFetch("/api/dashboard/inactivity", h),
-    ]).then(([overview, intelRes, dipRes, membersRes, sanctRes, kvkRes, inactRes]) => {
+      apiFetch("/api/dashboard/spy-reports", h),
+      apiFetch("/api/dashboard/blacklist", h),
+      apiFetch("/api/dashboard/events", h),
+      apiFetch("/api/dashboard/polls", h),
+      apiFetch("/api/dashboard/missions", h),
+      apiFetch("/api/dashboard/bot-guilds"),
+    ]).then(([overview, intelRes, dipRes, membersRes, sanctRes, kvkRes, inactRes,
+              spyRes, blRes, evRes, pollRes, misRes, guildsRes]) => {
       setData({
         overview,
         intel: intelRes?.intel ?? [],
@@ -417,7 +777,13 @@ function MasterIntelPanel({ onLock }) {
         sanctions: sanctRes ?? { sanctions: [], guildMap: {} },
         kvk: kvkRes ?? { records: [], guildMap: {} },
         inactivity: inactRes ?? { inactive: [], guildMap: {} },
+        spyReports: spyRes ?? { reports: [], guildMap: {} },
+        blacklist: blRes ?? { entries: [], guildMap: {} },
+        events: evRes ?? { events: [], guildMap: {} },
+        polls: pollRes ?? { polls: [], guildMap: {} },
+        missions: misRes ?? { claims: [], weekKey: "", guildMap: {} },
       });
+      setGuilds(guildsRes?.guilds ?? []);
       setLoading(false);
     });
   }, []);
@@ -432,9 +798,15 @@ function MasterIntelPanel({ onLock }) {
     { id:"heatmap",    icon:"🌡️", label:"Mapa de Calor" },
     { id:"diplomacy",  icon:"🤝", label:"Diplomacia" },
     { id:"roster",     icon:"👥", label:"Roster" },
+    { id:"spy",        icon:"🕵️", label:"Espías" },
+    { id:"blacklist",  icon:"⛔", label:"Lista Negra" },
+    { id:"events",     icon:"📅", label:"Eventos" },
+    { id:"polls",      icon:"🗳️", label:"Polls" },
+    { id:"missions",   icon:"🎯", label:"Misiones" },
   ];
 
-  const { overview, intel, diplomacy, members, sanctions, kvk, inactivity } = data;
+  const { overview, intel, diplomacy, members, sanctions, kvk, inactivity,
+          spyReports, blacklist, events, polls, missions } = data;
   const weeklyTop = useMemo(() =>
     [...members].sort((a,b) => (b.weeklyPoints||0)-(a.weeklyPoints||0)).slice(0,20), [members]);
   const totalTop = useMemo(() =>
@@ -587,6 +959,48 @@ function MasterIntelPanel({ onLock }) {
                 </tbody>
               </table>
             </div>
+          )}
+
+          {/* ESPÍAS */}
+          {tab === "spy" && (
+            <SpyReportsTab
+              reports={spyReports.reports}
+              guildMap={spyReports.guildMap}
+            />
+          )}
+
+          {/* LISTA NEGRA */}
+          {tab === "blacklist" && (
+            <BlacklistTab
+              entries={blacklist.entries}
+              guildMap={blacklist.guildMap}
+              guilds={guilds}
+            />
+          )}
+
+          {/* EVENTOS */}
+          {tab === "events" && (
+            <EventosTab
+              events={events.events}
+              guildMap={events.guildMap}
+            />
+          )}
+
+          {/* POLLS */}
+          {tab === "polls" && (
+            <PollsTab
+              polls={polls.polls}
+              guildMap={polls.guildMap}
+            />
+          )}
+
+          {/* MISIONES */}
+          {tab === "missions" && (
+            <MissionsTab
+              claims={missions.claims}
+              weekKey={missions.weekKey}
+              guildMap={missions.guildMap}
+            />
           )}
         </div>
       )}
