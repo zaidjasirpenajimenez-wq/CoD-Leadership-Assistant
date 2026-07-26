@@ -3,6 +3,9 @@ import { logger } from "../lib/logger";
 
 let workerInstance: Worker | null = null;
 
+// Mutex: queue OCR requests to prevent concurrent worker access (Tesseract is single-threaded)
+let ocrQueue: Promise<unknown> = Promise.resolve();
+
 export async function getOcrWorker(): Promise<Worker> {
   if (!workerInstance) {
     workerInstance = await createWorker("eng", 1, {
@@ -13,19 +16,25 @@ export async function getOcrWorker(): Promise<Worker> {
 }
 
 export async function processImageOcr(imageUrl: string): Promise<string> {
-  const worker = await getOcrWorker();
-  try {
-    const { data } = await worker.recognize(imageUrl);
-    return data.text;
-  } catch (err) {
-    logger.error({ err }, "OCR processing failed");
-    throw err;
-  } finally {
-    // Free cached image data from memory after each run (anti-OOM)
-    await worker.setParameters({
-      preserve_interword_spaces: "0",
-    });
-  }
+  const result = ocrQueue.then(async () => {
+    const worker = await getOcrWorker();
+    try {
+      const { data } = await worker.recognize(imageUrl);
+      return data.text;
+    } catch (err) {
+      logger.error({ err }, "OCR processing failed");
+      throw err;
+    } finally {
+      // Free cached image data from memory after each run (anti-OOM)
+      await worker.setParameters({
+        preserve_interword_spaces: "0",
+      });
+    }
+  });
+  // Chain the queue so the next call waits for this one, but don't let
+  // a rejection in this call block the queue permanently.
+  ocrQueue = result.catch(() => {});
+  return result as Promise<string>;
 }
 
 export async function terminateOcrWorker(): Promise<void> {
@@ -85,7 +94,9 @@ export function parseProfileFromText(text: string): ProfileScan {
     const line = lines[i];
 
     // Character ID: usually a large numeric string (8+ digits)
-    const idMatch = line.match(/\b(\d{8,})\b/);
+    // Also handle OCR artifacts: O→0, l→1, I→1
+    const normalized = line.replace(/[Ol]/g, "0").replace(/[I]/g, "1");
+    const idMatch = normalized.match(/\b(\d{8,})\b/);
     if (idMatch && !result.characterId) {
       result.characterId = idMatch[1];
     }

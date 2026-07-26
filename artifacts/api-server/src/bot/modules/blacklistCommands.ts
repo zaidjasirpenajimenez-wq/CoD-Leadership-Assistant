@@ -129,7 +129,7 @@ export async function handleBlacklistCommand(
               .setTimestamp()
               .setFooter({ text: "Alerta automática si intenta verificarse" }),
           ],
-        }).catch(() => {});
+        }).catch((err) => { logger.error({ err }, "Failed to notify spy channel on blacklist add"); });
       }
       return;
     }

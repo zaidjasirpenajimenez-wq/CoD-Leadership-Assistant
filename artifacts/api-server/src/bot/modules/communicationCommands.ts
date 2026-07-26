@@ -239,7 +239,9 @@ export async function handleEventCommand(
         createdBy: interaction.user.id,
       });
     }
-  } catch {}
+  } catch (err) {
+    logger.error({ err }, "Failed to schedule event reminder timer");
+  }
 
   await interaction.editReply({
     content: "✅ Evento publicado. Si la hora es válida el bot enviará un recordatorio 30 min antes automáticamente.",

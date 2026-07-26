@@ -114,7 +114,11 @@ export async function handleOperationsCommand(
     );
 
     await interaction.deferReply({ ephemeral: true });
-    const msg = await (interaction.channel as TextChannel).send({
+    if (!interaction.channel?.isSendable()) {
+      await interaction.editReply({ content: "❌ No se puede enviar mensajes en este canal." });
+      return;
+    }
+    const msg = await interaction.channel.send({
       content: "@here",
       embeds: [embed],
       components: [row],
@@ -159,7 +163,11 @@ export async function handleOperationsCommand(
     );
 
     await interaction.deferReply({ ephemeral: true });
-    const msg = await (interaction.channel as TextChannel).send({
+    if (!interaction.channel?.isSendable()) {
+      await interaction.editReply({ content: "❌ No se puede enviar mensajes en este canal." });
+      return;
+    }
+    const msg = await interaction.channel.send({
       embeds: [embed],
       components: [row],
     });

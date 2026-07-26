@@ -93,8 +93,10 @@ export function registerSentinel(client: Client): void {
         await message.delete();
         await message.author.send(
           "⚠️ Tu mensaje fue eliminado porque contiene un enlace no autorizado en este servidor.",
-        ).catch(() => {});
-      } catch {}
+        ).catch(() => { /* DMs may be disabled by the user */ });
+      } catch (err) {
+        logger.error({ err, userId: message.author.id }, "Anti-link: failed to delete message");
+      }
       return;
     }
 

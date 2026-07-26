@@ -22,6 +22,7 @@ export interface IGuildConfig extends Document {
   memberRoleId?: string;
   inactiveDays: number;
   authorizedRoles: string[];
+  lastWeeklyReportSent?: number | null;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -48,6 +49,7 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
     memberRoleId: { type: String, default: null },
     inactiveDays: { type: Number, default: 7 },
     authorizedRoles: [{ type: String }],
+    lastWeeklyReportSent: { type: Number, default: null },
   },
   { timestamps: true, strict: true },
 );
@@ -118,6 +120,8 @@ const IntelDataSchema = new Schema<IIntelData>(
   },
   { strict: true },
 );
+
+IntelDataSchema.index({ sourceGuildId: 1, allianceTag: 1 });
 
 export const IntelData: Model<IIntelData> =
   mongoose.models["IntelData"] ||

@@ -18,8 +18,10 @@ import { getDiscordClient } from "../bot/client";
 
 const router = Router();
 
+const MASTER_KEY = process.env["MASTER_INTEL_KEY"] ?? "COD_MASTER_INTEL";
+
 function requireMaster(req: Request, res: Response): boolean {
-  if (req.headers["x-master-key"] !== "COD_MASTER_INTEL") {
+  if (req.headers["x-master-key"] !== MASTER_KEY) {
     res.status(401).json({ error: "Unauthorized" });
     return false;
   }
@@ -76,7 +78,7 @@ router.get("/api/dashboard/bot-guilds", async (req: Request, res: Response) => {
 });
 
 router.get("/api/dashboard/guilds", async (req: Request, res: Response) => {
-  if (!requireMongo(res)) return;
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
   try {
     const configs = await GuildConfig.find({}).select("guildId allianceTag updatedAt").lean();
     res.json({ guilds: configs });
@@ -87,7 +89,7 @@ router.get("/api/dashboard/guilds", async (req: Request, res: Response) => {
 });
 
 router.get("/api/dashboard/guilds/:guildId", async (req: Request, res: Response) => {
-  if (!requireMongo(res)) return;
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
   try {
     const { guildId } = req.params;
     const [config, memberCount, warnedCount, activeCount, pacts] = await Promise.all([
@@ -106,7 +108,7 @@ router.get("/api/dashboard/guilds/:guildId", async (req: Request, res: Response)
 });
 
 router.get("/api/dashboard/guilds/:guildId/leaderboard", async (req: Request, res: Response) => {
-  if (!requireMongo(res)) return;
+  if (!requireMaster(req, res) || !requireMongo(res)) return;
   try {
     const { guildId } = req.params;
     const [weekly, allTime] = await Promise.all([

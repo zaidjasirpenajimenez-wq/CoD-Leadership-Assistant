@@ -184,7 +184,11 @@ async function fireDueTimers(client: Client): Promise<void> {
     try {
       const guild = client.guilds.cache.get(timer.guildId);
       if (!guild) continue;
-      const chan = guild.channels.cache.get(timer.channelId) as TextChannel | undefined;
+      // Fetch from API if not in cache (e.g. after bot restart)
+      let chan = guild.channels.cache.get(timer.channelId) as TextChannel | undefined;
+      if (!chan) {
+        chan = await guild.channels.fetch(timer.channelId).catch(() => null) as TextChannel | undefined;
+      }
       if (!chan) continue;
 
       await chan.send({

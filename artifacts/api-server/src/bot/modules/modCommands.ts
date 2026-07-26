@@ -73,7 +73,11 @@ export async function handleModCommand(interaction: ChatInputCommandInteraction)
 
   try {
     if (sub === "ban") {
-      const target = interaction.options.getMember("miembro") as GuildMember;
+      const target = interaction.options.getMember("miembro") as GuildMember | null;
+      if (!target) {
+        await interaction.reply({ content: "❌ Miembro no encontrado en el servidor.", ephemeral: true });
+        return;
+      }
       const reason = interaction.options.getString("razon") ?? "Sin razón especificada";
       await target.ban({ reason });
 
@@ -101,7 +105,11 @@ export async function handleModCommand(interaction: ChatInputCommandInteraction)
       await logMod(embed);
 
     } else if (sub === "kick") {
-      const target = interaction.options.getMember("miembro") as GuildMember;
+      const target = interaction.options.getMember("miembro") as GuildMember | null;
+      if (!target) {
+        await interaction.reply({ content: "❌ Miembro no encontrado en el servidor.", ephemeral: true });
+        return;
+      }
       const reason = interaction.options.getString("razon") ?? "Sin razón especificada";
       await target.kick(reason);
 
@@ -129,7 +137,11 @@ export async function handleModCommand(interaction: ChatInputCommandInteraction)
       await logMod(embed);
 
     } else if (sub === "mute") {
-      const target  = interaction.options.getMember("miembro") as GuildMember;
+      const target  = interaction.options.getMember("miembro") as GuildMember | null;
+      if (!target) {
+        await interaction.reply({ content: "❌ Miembro no encontrado en el servidor.", ephemeral: true });
+        return;
+      }
       const minutes = interaction.options.getInteger("minutos", true);
       const reason  = interaction.options.getString("razon") ?? "Sin razón especificada";
       await target.timeout(minutes * 60 * 1000, reason);
@@ -160,7 +172,11 @@ export async function handleModCommand(interaction: ChatInputCommandInteraction)
       await logMod(embed);
 
     } else if (sub === "warn") {
-      const target  = interaction.options.getMember("miembro") as GuildMember;
+      const target  = interaction.options.getMember("miembro") as GuildMember | null;
+      if (!target) {
+        await interaction.reply({ content: "❌ Miembro no encontrado en el servidor.", ephemeral: true });
+        return;
+      }
       const reason  = interaction.options.getString("razon", true);
       const profile = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },

@@ -341,7 +341,7 @@ export async function handleEventoButton(interaction: ButtonInteraction): Promis
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: 10, totalPoints: 10, eventsAttended: 1 }, $set: { lastActivity: new Date() } },
         { upsert: true, new: true, setDefaultsOnInsert: true },
-      ).catch(() => {});
+      ).catch((err) => { logger.error({ err, userId }, "Failed to award evento RSVP points"); });
     }
 
     const shortId = event._id.toString().slice(-6).toUpperCase();
@@ -400,7 +400,7 @@ export function startEventoScheduler(client: Client): void {
                 ],
               }),
             )
-            .catch(() => {});
+            .catch(() => { /* DMs can fail if user has them disabled — expected */ });
         }
 
         await AllianceEvent.findByIdAndUpdate(event._id, { reminderSent: true });

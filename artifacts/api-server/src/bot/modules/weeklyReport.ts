@@ -2,8 +2,6 @@ import { Client, EmbedBuilder, TextChannel } from "discord.js";
 import { GuildConfig, UserProfile, ResourceRequestLog, WarAlertLog } from "../../db/schemas";
 import { logger } from "../../lib/logger";
 
-const lastReportWeek = new Map<string, number>();
-
 function getISOWeek(d: Date): number {
   const date = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
   const day  = date.getUTCDay() || 7;
@@ -30,9 +28,10 @@ export function startWeeklyReport(client: Client): void {
     }
 
     for (const config of configs) {
-      if (lastReportWeek.get(config.guildId) === week) continue;
-      lastReportWeek.set(config.guildId, week);
+      // Use DB-persisted week number so restarts don't trigger duplicate reports
+      if ((config as { lastWeeklyReportSent?: number | null }).lastWeeklyReportSent === week) continue;
       try {
+        await GuildConfig.updateOne({ guildId: config.guildId }, { $set: { lastWeeklyReportSent: week } });
         await generateAndPostReport(client, config.guildId, config.channels.weeklyReport!, config.allianceTag);
       } catch (err) {
         logger.error({ err, guildId: config.guildId }, "Weekly report: failed to post report");
