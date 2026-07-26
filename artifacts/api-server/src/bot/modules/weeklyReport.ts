@@ -84,13 +84,13 @@ async function postWeeklyTopPlayers(
   const winner = guild.members.cache.get(top[0].discordId)?.displayName ?? top[0].ign ?? "—";
 
   await channel.send({
-    content: `@here 🏅 **¡${winner} fue el más activo del domingo!**`,
+    content: `@here 📋 **¡Ranking semanal publicado!**`,
     embeds: [
       new EmbedBuilder()
         .setTitle(`📋 TOP SEMANAL — [${allianceTag}]`)
         .setColor(0x5865f2)
         .setDescription(`📅 **${dateLabel}**\n\n${lines.join("\n")}`)
-        .setFooter({ text: "Kingdom Guardian Pro  •  Ranking dominical" })
+        .setFooter({ text: "Kingdom Guardian Pro  •  Ranking semanal" })
         .setTimestamp(),
     ],
     allowedMentions: { parse: ["everyone"] },

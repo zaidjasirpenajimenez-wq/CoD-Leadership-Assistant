@@ -352,7 +352,9 @@ export async function postMonthlyLeaderboard(client: Client, guildId: string): P
   if (!chan) return;
 
   const now = new Date();
-  const monthName = now.toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
+  // El 1° del mes se publica el ranking del mes anterior
+  const lastMonth = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
+  const monthName = lastMonth.toLocaleDateString("es-ES", { month: "long", year: "numeric", timeZone: "UTC" });
 
   const top = await UserProfile.find({ guildId, weeklyPoints: { $gt: 0 } })
     .sort({ weeklyPoints: -1 })
@@ -364,18 +366,18 @@ export async function postMonthlyLeaderboard(client: Client, guildId: string): P
   const medals = ["🥇", "🥈", "🥉"];
   const lines = top.map((p, i) => {
     const m = medals[i] ?? `**${i + 1}.**`;
-    return `${m} <@${p.discordId}> — **${p.weeklyPoints}** pts del mes`;
+    return `${m} <@${p.discordId}> — **${p.weeklyPoints}** pts`;
   });
 
   await chan.send({
     embeds: [
       new EmbedBuilder()
-        .setTitle(`🏆 RANKING MENSUAL — CIERRE DE ${monthName.toUpperCase()}`)
+        .setTitle(`🏆 RANKING DEL MES PASADO — ${monthName.toUpperCase()}`)
         .setColor(0xffd700)
         .setDescription(lines.join("\n"))
-        .addFields({ name: "Soldados activos este mes", value: String(top.length), inline: true })
+        .addFields({ name: "Soldados activos ese mes", value: String(top.length), inline: true })
         .setTimestamp()
-        .setFooter({ text: "Kingdom Guardian Pro — Los puntos del mes han sido reiniciados" }),
+        .setFooter({ text: "Kingdom Guardian Pro — Los puntos han sido reiniciados" }),
     ],
   });
 
