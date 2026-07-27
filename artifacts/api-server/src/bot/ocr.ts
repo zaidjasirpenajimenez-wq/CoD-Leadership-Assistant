@@ -96,14 +96,27 @@ export function parseProfileFromText(text: string): ProfileScan {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // ── #NNN anywhere in the line → server number (highest priority) ─────────
-    // Handles: "#762", "#762 #5057-9040", "Servidor #762", etc.
-    if (!result.gameServer) {
-      const hashMatch = line.match(/#(\d{3,5})\b/);
-      if (hashMatch) {
-        result.gameServer = hashMatch[1];
-        continue;
+    // ── #NNN / #NNNNNNNN anywhere in the line ──────────────────────────────
+    // Short #NNN (3-5 digits) → server number
+    // Long  #NNNNNNN (6+ digits, may have dashes) → Character ID
+    // A single line can have both: "#762 #5057-9040"
+    if (!result.gameServer || !result.characterId) {
+      // Normalize OCR artifacts before matching (S→5, O→0, l/I→1)
+      const normLine = line
+        .replace(/S/g, "5")
+        .replace(/O/g, "0")
+        .replace(/[lI]/g, "1");
+      // Find all #XXXX tokens
+      const tokens = [...normLine.matchAll(/#([\d\-]{3,})/g)];
+      for (const tok of tokens) {
+        const digits = tok[1].replace(/-/g, ""); // strip dashes
+        if (digits.length <= 5 && !result.gameServer) {
+          result.gameServer = digits;
+        } else if (digits.length >= 6 && !result.characterId) {
+          result.characterId = digits;
+        }
       }
+      if (result.gameServer || result.characterId) continue;
     }
 
     // ── "Servidor …" label → look at next line for #NNN ────────────────────
@@ -160,9 +173,13 @@ export function parseProfileFromText(text: string): ProfileScan {
   }
 
   // ── Fallback: any 8+ digit number not already assigned ──────────────────
-  // Only used if the label-based approach found nothing
+  // Skip lines that are clearly game stats (Poder, Méritos, Kills, etc.)
+  const STAT_KEYWORDS = /poder|power|merit|m[eé]rito|kill|trophy|trofeo|battle|batalla|gold|oro|wood|madera/i;
   if (!result.characterId) {
+    let skipNext = false;
     for (const line of lines) {
+      if (STAT_KEYWORDS.test(line)) { skipNext = true; continue; }
+      if (skipNext) { skipNext = false; continue; } // skip the values line right after the label
       const n = norm(line);
       const m = n.match(/\b(\d{8,})\b/);
       if (m) { result.characterId = m[1]; break; }
