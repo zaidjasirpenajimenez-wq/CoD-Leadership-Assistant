@@ -281,6 +281,16 @@ export function registerVerificationListener(client: Client): void {
         if (guestRoleId && member.roles.cache.has(guestRoleId)) {
           await member.roles.remove(guestRoleId);
         }
+
+        // ── Nickname: "IGN | ID" ─────────────────────────────────────────────
+        if (profile.ign) {
+          const ign      = profile.ign.slice(0, 20); // cap to leave room for ID
+          const idSuffix = profile.characterId ? ` | ${profile.characterId}` : "";
+          const nick     = `${ign}${idSuffix}`.slice(0, 32); // Discord limit
+          await member.setNickname(nick, "Verificación automática OCR").catch((nickErr) => {
+            logger.warn({ nickErr, userId: discordId }, "Could not set nickname during verification");
+          });
+        }
       } catch (roleErr) {
         logger.warn({ roleErr }, "Could not update roles during verification");
         roleStatus = "⚠️ Registrado (no se pudo asignar rol — revisa permisos del bot)";
