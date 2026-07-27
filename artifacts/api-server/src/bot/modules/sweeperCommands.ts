@@ -152,6 +152,89 @@ export function registerVerificationListener(client: Client): void {
       const guildId = message.guild.id;
       const discordId = message.author.id;
 
+      // ── Alliance validation ───────────────────────────────────────────────
+      // Normalize an alliance tag for comparison: remove brackets, spaces, strip case
+      const normalizeTag = (s: string) => s.replace(/[\[\]\-\s]/g, "").toLowerCase();
+      const requiredTag = config.allianceTag && config.allianceTag !== "GUILD"
+        ? normalizeTag(config.allianceTag)
+        : null;
+
+      if (requiredTag) {
+        if (profile.alliance) {
+          if (normalizeTag(profile.alliance) !== requiredTag) {
+            // Detected alliance doesn't match — reject
+            const modChan = message.guild.channels.cache.get(config.channels?.modLogs ?? "") as TextChannel | undefined;
+            if (modChan) {
+              await modChan.send({
+                embeds: [
+                  new EmbedBuilder()
+                    .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+                    .setTitle("🚫  VERIFICACIÓN RECHAZADA — Alianza Incorrecta")
+                    .setColor(0xff7b00)
+                    .setDescription(
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                      `<@${discordId}> intentó verificarse pero su perfil muestra una alianza diferente.\n` +
+                      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                    )
+                    .addFields(
+                      { name: "👤 Discord",          value: `<@${discordId}>`,           inline: true },
+                      { name: "🗡️ IGN detectado",    value: profile.ign ?? "Desconocido", inline: true },
+                      { name: "\u200b",               value: "\u200b",                    inline: true },
+                      { name: "⚔️ Alianza detectada", value: profile.alliance,            inline: true },
+                      { name: "✅ Alianza requerida", value: config.allianceTag,          inline: true },
+                    )
+                    .setTimestamp()
+                    .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" }),
+                ],
+              }).catch(() => {});
+            }
+            await message.reply({
+              embeds: [
+                new EmbedBuilder()
+                  .setTitle("🚫  Alianza Incorrecta")
+                  .setColor(0xff7b00)
+                  .setDescription(
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `Tu perfil pertenece a la alianza **${profile.alliance}**,\n` +
+                    `pero este Discord es exclusivo de **${config.allianceTag}**.\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                  )
+                  .addFields({ name: "ℹ️ Info", value: "Solo los miembros de la alianza pueden verificarse aquí.", inline: false })
+                  .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
+                  .setTimestamp(),
+              ],
+            });
+            return;
+          }
+        } else {
+          // Alliance not readable in the screenshot — alert mods but don't block
+          const modChan = message.guild.channels.cache.get(config.channels?.modLogs ?? "") as TextChannel | undefined;
+          if (modChan) {
+            await modChan.send({
+              embeds: [
+                new EmbedBuilder()
+                  .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
+                  .setTitle("⚠️  Alianza No Legible en Verificación")
+                  .setColor(0xfee75c)
+                  .setDescription(
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
+                    `<@${discordId}> se verificó pero el OCR no pudo leer su alianza.\n` +
+                    `Revisa manualmente que pertenezca a **${config.allianceTag}**.\n` +
+                    `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
+                  )
+                  .addFields(
+                    { name: "👤 Discord",       value: `<@${discordId}>`,           inline: true },
+                    { name: "🗡️ IGN detectado", value: profile.ign ?? "Desconocido", inline: true },
+                    { name: "🆔 Character ID",  value: profile.characterId ?? "?",  inline: true },
+                  )
+                  .setTimestamp()
+                  .setFooter({ text: "Kingdom Guardian Pro  •  Revisión Manual Requerida" }),
+              ],
+            }).catch(() => {});
+          }
+        }
+      }
+
       // ── Blacklist check — alert R5 silently if IGN is banned ─────────────
       if (profile.ign) {
         const banned = await checkBlacklist(guildId, profile.ign);
@@ -260,6 +343,7 @@ export function registerVerificationListener(client: Client): void {
           guildId,
           ign: profile.ign ?? existing?.ign ?? "Desconocido",
           characterId: profile.characterId,
+          alliance: profile.alliance ?? existing?.alliance ?? "",
           verifiedAt: existing ? existing.verifiedAt : new Date(),
         },
         { upsert: true, new: true, setDefaultsOnInsert: true },
@@ -312,6 +396,8 @@ export function registerVerificationListener(client: Client): void {
               { name: "🆔 Character ID",  value: `\`${profile.characterId}\``,                      inline: true },
               { name: "🗡️ IGN",           value: profile.ign ?? "Extraído",                          inline: true },
               { name: "🎖️ Estado",        value: nameChanged ? "🔄 Nombre actualizado" : roleStatus, inline: true },
+              ...(profile.gameServer ? [{ name: "🎮 Servidor", value: `#${profile.gameServer}`, inline: true }] : []),
+              ...(profile.alliance   ? [{ name: "⚔️ Alianza",   value: profile.alliance,         inline: true }] : []),
             )
             .setTimestamp()
             .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" }),

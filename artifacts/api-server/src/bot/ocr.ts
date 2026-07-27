@@ -84,90 +84,113 @@ export interface ProfileScan {
   characterId: string | null;
   ign: string | null;
   gameServer: string | null;
+  alliance: string | null;
 }
 
 export function parseProfileFromText(text: string): ProfileScan {
   const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
-  const result: ProfileScan = { characterId: null, ign: null, gameServer: null };
+  const result: ProfileScan = { characterId: null, ign: null, gameServer: null, alliance: null };
 
-  // Helper: normalize OCR artifacts in a line before reading numbers
+  // Normalize OCR digit-substitution artifacts in a string
   const norm = (s: string) => s.replace(/[Ol]/g, "0").replace(/[Ii]/g, "1");
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // ── #NNN / #NNNNNNNN anywhere in the line ──────────────────────────────
-    // Short #NNN (3-5 digits) → server number
-    // Long  #NNNNNNN (6+ digits, may have dashes) → Character ID
-    // A single line can have both: "#762 #5057-9040"
+    // ── "Lord" label (Call of Dragons) ─────────────────────────────────────
+    // The word "Lord" appears as a label; the IGN is on the NEXT line.
+    // The Character ID ("ID: 21503712") often appears on this same line.
+    if (/\blord\b/i.test(line)) {
+      if (!result.characterId) {
+        const idMatch = norm(line).match(/\bID[:\s]+(\d{6,})\b/i);
+        if (idMatch) result.characterId = idMatch[1];
+      }
+      if (!result.ign) {
+        // IGN may be inline ("Lord NfL Zxid") or on the next line
+        const inLine = line
+          .replace(/\blord[\s:]*/i, "")
+          .replace(/\bID[:\s]+\d+\b/gi, "")
+          .trim();
+        if (inLine.length > 1) {
+          result.ign = inLine;
+        } else {
+          const nextLine = (lines[i + 1] ?? "").trim();
+          if (nextLine.length > 1 && !/^\d+$/.test(nextLine)) {
+            result.ign = nextLine;
+            i++;
+          }
+        }
+      }
+      continue;
+    }
+
+    // ── "Servidor" label (alone or combined with "División") → server on next line ──
+    if (!result.gameServer && /^servidor\b/i.test(line)) {
+      const nextRaw = lines[i + 1] ?? "";
+      const nextHash = nextRaw.match(/#(\d{3,5})\b/);
+      if (nextHash) { result.gameServer = nextHash[1]; i++; continue; }
+      const nextNum = norm(nextRaw).match(/^(\d{3,5})$/);
+      if (nextNum) { result.gameServer = nextNum[1]; i++; continue; }
+    }
+
+    // ── "Alianza" label → alliance name on next line ─────────────────────────
+    if (!result.alliance && /\balianza\b/i.test(line)) {
+      const nextLine = (lines[i + 1] ?? "").trim();
+      if (nextLine.length > 0 && !/^(facción|faction)/i.test(nextLine)) {
+        // Take the first bracket group or first whitespace-delimited token
+        const clean = nextLine.match(/^(\[[^\]]*\]|\S+)/);
+        result.alliance = clean ? clean[1] : nextLine.split(/\s{2,}/)[0];
+        i++;
+        continue;
+      }
+    }
+
+    // ── Numeric # tokens: server (#NNN) or character ID (#NNNNNNN) ──────────
+    // Division codes like #SoS7-9040 start with a letter and won't match
+    // /#([\d\-]{3,})/ so they're naturally ignored here.
     if (!result.gameServer || !result.characterId) {
-      // Normalize OCR artifacts before matching (S→5, O→0, l/I→1)
-      const normLine = line
-        .replace(/S/g, "5")
-        .replace(/O/g, "0")
-        .replace(/[lI]/g, "1");
-      // Find all #XXXX tokens
+      const normLine = line.replace(/S/g, "5").replace(/O/g, "0").replace(/[lI]/g, "1");
       const tokens = [...normLine.matchAll(/#([\d\-]{3,})/g)];
       for (const tok of tokens) {
-        const digits = tok[1].replace(/-/g, ""); // strip dashes
+        const digits = tok[1].replace(/-/g, "");
         if (digits.length <= 5 && !result.gameServer) {
           result.gameServer = digits;
         } else if (digits.length >= 6 && !result.characterId) {
           result.characterId = digits;
         }
       }
-      if (result.gameServer || result.characterId) continue;
     }
 
-    // ── "Servidor …" label → look at next line for #NNN ────────────────────
-    // Handles: "Servidor Division 1" (next line has "#762 …")
-    if (!result.gameServer && /^servidor\b/i.test(line)) {
-      const nextRaw = lines[i + 1] ?? "";
-      const nextHash = nextRaw.match(/#(\d{3,5})\b/);
-      if (nextHash) {
-        result.gameServer = nextHash[1];
-        i++;
-        continue;
-      }
-      // Fallback: bare number on next line
-      const nextNum = norm(nextRaw).match(/^(\d{3,5})$/);
-      if (nextNum) {
-        result.gameServer = nextNum[1];
-        i++;
-        continue;
-      }
+    // ── Bare "ID: XXXXXXXX" anywhere in the line ────────────────────────────
+    // Catches the "ID: 21503712" that appears next to the "Lord" label.
+    if (!result.characterId) {
+      const bareId = norm(line).match(/\bID[:\s]+(\d{6,})\b/i);
+      if (bareId) result.characterId = bareId[1];
     }
 
-    // ── "Server: 1234" inline ───────────────────────────────────────────────
+    // ── "Server: 1234" inline ────────────────────────────────────────────────
     if (!result.gameServer) {
       const inLine = line.match(/(?:servidor|server)[:\s#]+(\d{3,5})/i);
-      if (inLine) {
-        result.gameServer = inLine[1];
-      }
+      if (inLine) result.gameServer = inLine[1];
     }
 
-    // ── Character ID label → number on the SAME or NEXT line ───────────────
+    // ── Character ID label → number on same or next line ────────────────────
     if (!result.characterId) {
       if (/(?:character\s*id|id\s*personaje|id\s*jugador|player\s*id|uid)[:\s]*/i.test(line)) {
-        // Value may be on same line after the label
         const inLine = norm(line).match(/(\d{6,})/);
         if (inLine) {
           result.characterId = inLine[1];
         } else {
-          // Or on the next line
           const nextNorm = norm(lines[i + 1] ?? "");
           const nextNum  = nextNorm.match(/^(\d{6,})$/);
-          if (nextNum) {
-            result.characterId = nextNum[1];
-            i++;
-          }
+          if (nextNum) { result.characterId = nextNum[1]; i++; }
         }
       }
     }
 
-    // ── IGN label ───────────────────────────────────────────────────────────
-    if (/^(name|ign|player|character|lord|nombre)[\s:]/i.test(line)) {
-      const ign = line.replace(/^(name|ign|player|character|lord|nombre)[\s:]*/i, "").trim();
+    // ── IGN label (inline format: "Name: NfL Zxid") ─────────────────────────
+    if (!result.ign && /^(name|ign|player|nombre)[\s:]/i.test(line)) {
+      const ign = line.replace(/^(name|ign|player|nombre)[\s:]*/i, "").trim();
       if (ign.length > 1) result.ign = ign;
     }
   }
