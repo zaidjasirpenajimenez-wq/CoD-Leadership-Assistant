@@ -102,8 +102,10 @@ export function parseProfileFromText(text: string): ProfileScan {
     // The Character ID ("ID: 21503712") often appears on this same line.
     if (/\blord\b/i.test(line)) {
       if (!result.characterId) {
-        const idMatch = norm(line).match(/\bID[:\s]+(\d{6,})\b/i);
-        if (idMatch) result.characterId = idMatch[1];
+        // Search the RAW line — norm() would turn "I"→"1" making "ID" invisible to the regex.
+        // Also accept "1D:" in case OCR itself misread the capital I as 1.
+        const idMatch = line.match(/\b[I1]D[:\s]+(\d{6,})\b/i);
+        if (idMatch) result.characterId = norm(idMatch[1]);
       }
       if (!result.ign) {
         // IGN may be inline ("Lord NfL Zxid") or on the next line
@@ -162,10 +164,11 @@ export function parseProfileFromText(text: string): ProfileScan {
     }
 
     // ── Bare "ID: XXXXXXXX" anywhere in the line ────────────────────────────
-    // Catches the "ID: 21503712" that appears next to the "Lord" label.
+    // Use the RAW line (not norm'd) — norm() turns "I"→"1" which breaks /ID/.
+    // Also accept "1D:" for OCR misreads of the capital I.
     if (!result.characterId) {
-      const bareId = norm(line).match(/\bID[:\s]+(\d{6,})\b/i);
-      if (bareId) result.characterId = bareId[1];
+      const bareId = line.match(/\b[I1]D[:\s]+(\d{6,})\b/i);
+      if (bareId) result.characterId = norm(bareId[1]);
     }
 
     // ── "Server: 1234" inline ────────────────────────────────────────────────
