@@ -172,15 +172,28 @@ export function parseProfileFromText(text: string): ProfileScan {
     }
   }
 
-  // ── Fallback: any 8+ digit number not already assigned ──────────────────
-  // Skip lines that are clearly game stats (Poder, Méritos, Kills, etc.)
-  const STAT_KEYWORDS = /poder|power|merit|m[eé]rito|kill|trophy|trofeo|battle|batalla|gold|oro|wood|madera/i;
+  // ── Fallback: bare 8+ digit number, avoiding stat lines ─────────────────
+  // Expanded to cover all Call of Dragons stats in Spanish and English so we
+  // don't confuse Poder / Méritos / etc. with the Character ID.
+  const STAT_KEYWORDS =
+    /poder|power|m[eé]rit|m[eé]rito|kill|trophy|trofeo|battle|batalla|gold|oro|wood|madera|fuerza|strength|troop|tropa|soldier|soldado|constru|investig|research|heal|cura|recruit|reclu|gather|recolect|donac|donation|puntos|points|ranking|rango|logro|achievement|muerte|dead|recurso|resource|cristal|crystal|gema|gem|food|comida|chest|cofre|fortuna|fortune|hierro|iron|stone|piedra|lumber|militar|combate|combat|alianza|alliance/i;
+
   if (!result.characterId) {
-    let skipNext = false;
-    for (const line of lines) {
-      if (STAT_KEYWORDS.test(line)) { skipNext = true; continue; }
-      if (skipNext) { skipNext = false; continue; } // skip the values line right after the label
-      const n = norm(line);
+    // Pre-compute which line indices to skip:
+    // any line matching a stat keyword AND up to 2 lines after it
+    // (handles "Poder\n123456789" as well as "Poder\n\n123456789" layouts).
+    const skipIndices = new Set<number>();
+    for (let i = 0; i < lines.length; i++) {
+      if (STAT_KEYWORDS.test(lines[i])) {
+        skipIndices.add(i);
+        skipIndices.add(i + 1);
+        skipIndices.add(i + 2);
+      }
+    }
+
+    for (let i = 0; i < lines.length; i++) {
+      if (skipIndices.has(i)) continue;
+      const n = norm(lines[i]);
       const m = n.match(/\b(\d{8,})\b/);
       if (m) { result.characterId = m[1]; break; }
     }
