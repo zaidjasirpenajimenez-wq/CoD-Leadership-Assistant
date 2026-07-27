@@ -96,34 +96,40 @@ export function parseProfileFromText(text: string): ProfileScan {
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // ── #NNN format → always server number (highest priority) ───────────────
+    // ── #NNN anywhere in the line → server number (highest priority) ─────────
+    // Handles: "#762", "#762 #5057-9040", "Servidor #762", etc.
     if (!result.gameServer) {
-      const hashMatch = line.match(/^#(\d{3,5})$/);
+      const hashMatch = line.match(/#(\d{3,5})\b/);
       if (hashMatch) {
         result.gameServer = hashMatch[1];
         continue;
       }
     }
 
-    // ── Servidor / Server label → number on the SAME or NEXT line ──────────
+    // ── "Servidor …" label → look at next line for #NNN ────────────────────
+    // Handles: "Servidor Division 1" (next line has "#762 …")
+    if (!result.gameServer && /^servidor\b/i.test(line)) {
+      const nextRaw = lines[i + 1] ?? "";
+      const nextHash = nextRaw.match(/#(\d{3,5})\b/);
+      if (nextHash) {
+        result.gameServer = nextHash[1];
+        i++;
+        continue;
+      }
+      // Fallback: bare number on next line
+      const nextNum = norm(nextRaw).match(/^(\d{3,5})$/);
+      if (nextNum) {
+        result.gameServer = nextNum[1];
+        i++;
+        continue;
+      }
+    }
+
+    // ── "Server: 1234" inline ───────────────────────────────────────────────
     if (!result.gameServer) {
-      // "Servidor: 1234" or "Server 1234" or "Servidor #1234" on same line
-      const inLine = line.match(/(?:servidor|server)[:\s#]*(\d{3,5})/i);
+      const inLine = line.match(/(?:servidor|server)[:\s#]+(\d{3,5})/i);
       if (inLine) {
         result.gameServer = inLine[1];
-      } else if (/^(servidor|server)$/i.test(line)) {
-        // Label alone → value on next line, may have # prefix
-        const nextRaw  = lines[i + 1] ?? "";
-        const nextNum  = nextRaw.match(/^#?(\d{3,12})$/);
-        if (nextNum) {
-          const n = nextNum[1];
-          if (n.length <= 5) {
-            result.gameServer = n;
-          } else if (!result.characterId) {
-            result.characterId = norm(n);
-          }
-          i++;
-        }
       }
     }
 
