@@ -11,6 +11,12 @@ export async function getOcrWorker(): Promise<Worker> {
     workerInstance = await createWorker("eng", 1, {
       logger: () => {},
     });
+    // PSM 11 = Sparse text: finds as much text as possible in any order.
+    // Essential for game UI screenshots where text is scattered across the screen
+    // (IGN, ID, server number, alliance — each in a different position/size).
+    await workerInstance.setParameters({
+      tessedit_pageseg_mode: "11" as unknown as string,
+    });
   }
   return workerInstance;
 }
