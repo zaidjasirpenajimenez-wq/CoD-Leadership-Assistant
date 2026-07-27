@@ -59,6 +59,7 @@ export function registerVerificationListener(client: Client): void {
 
     try {
       const text = await processImageOcr(imageAttachment.url);
+      logger.info({ guildId: message.guild.id, userId: message.author.id, ocrText: text }, "OCR raw text");
       const profile = parseProfileFromText(text);
 
       if (!profile.characterId) {

@@ -90,38 +90,89 @@ export function parseProfileFromText(text: string): ProfileScan {
   const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
   const result: ProfileScan = { characterId: null, ign: null, gameServer: null };
 
+  // Helper: normalize OCR artifacts in a line before reading numbers
+  const norm = (s: string) => s.replace(/[Ol]/g, "0").replace(/[Ii]/g, "1");
+
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
 
-    // Character ID: usually a large numeric string (8+ digits)
-    // Also handle OCR artifacts: O→0, l→1, I→1
-    const normalized = line.replace(/[Ol]/g, "0").replace(/[I]/g, "1");
-    const idMatch = normalized.match(/\b(\d{8,})\b/);
-    if (idMatch && !result.characterId) {
-      result.characterId = idMatch[1];
-    }
-
-    // Game server number: patterns like "Server: 1234", "S1234", "Servidor: 1234",
-    // "Server 1234", "#1234", or standalone 3-4 digit numbers near server keywords
+    // ── #NNN format → always server number (highest priority) ───────────────
     if (!result.gameServer) {
-      const serverMatch =
-        line.match(/(?:server|servidor|srv|s)[:\s#]*(\d{3,5})/i) ??
-        line.match(/^#?(\d{3,5})$/) ??
-        line.match(/\bS(\d{3,5})\b/i);
-      if (serverMatch) {
-        result.gameServer = serverMatch[1];
+      const hashMatch = line.match(/^#(\d{3,5})$/);
+      if (hashMatch) {
+        result.gameServer = hashMatch[1];
+        continue;
       }
     }
 
-    // IGN: look for label keywords
+    // ── Servidor / Server label → number on the SAME or NEXT line ──────────
+    if (!result.gameServer) {
+      // "Servidor: 1234" or "Server 1234" or "Servidor #1234" on same line
+      const inLine = line.match(/(?:servidor|server)[:\s#]*(\d{3,5})/i);
+      if (inLine) {
+        result.gameServer = inLine[1];
+      } else if (/^(servidor|server)$/i.test(line)) {
+        // Label alone → value on next line, may have # prefix
+        const nextRaw  = lines[i + 1] ?? "";
+        const nextNum  = nextRaw.match(/^#?(\d{3,12})$/);
+        if (nextNum) {
+          const n = nextNum[1];
+          if (n.length <= 5) {
+            result.gameServer = n;
+          } else if (!result.characterId) {
+            result.characterId = norm(n);
+          }
+          i++;
+        }
+      }
+    }
+
+    // ── Character ID label → number on the SAME or NEXT line ───────────────
+    if (!result.characterId) {
+      if (/(?:character\s*id|id\s*personaje|id\s*jugador|player\s*id|uid)[:\s]*/i.test(line)) {
+        // Value may be on same line after the label
+        const inLine = norm(line).match(/(\d{6,})/);
+        if (inLine) {
+          result.characterId = inLine[1];
+        } else {
+          // Or on the next line
+          const nextNorm = norm(lines[i + 1] ?? "");
+          const nextNum  = nextNorm.match(/^(\d{6,})$/);
+          if (nextNum) {
+            result.characterId = nextNum[1];
+            i++;
+          }
+        }
+      }
+    }
+
+    // ── IGN label ───────────────────────────────────────────────────────────
     if (/^(name|ign|player|character|lord|nombre)[\s:]/i.test(line)) {
       const ign = line.replace(/^(name|ign|player|character|lord|nombre)[\s:]*/i, "").trim();
       if (ign.length > 1) result.ign = ign;
     }
   }
 
-  // Fallback: ign = first non-numeric, non-server line
-  if (!result.ign && lines.length > 0) {
+  // ── Fallback: any 8+ digit number not already assigned ──────────────────
+  // Only used if the label-based approach found nothing
+  if (!result.characterId) {
+    for (const line of lines) {
+      const n = norm(line);
+      const m = n.match(/\b(\d{8,})\b/);
+      if (m) { result.characterId = m[1]; break; }
+    }
+  }
+
+  // ── Fallback server: standalone 3-5 digit line near top of text ─────────
+  if (!result.gameServer) {
+    for (const line of lines.slice(0, 10)) {
+      const m = line.match(/^#?(\d{3,5})$/);
+      if (m) { result.gameServer = m[1]; break; }
+    }
+  }
+
+  // ── Fallback IGN: first non-numeric, non-keyword line ───────────────────
+  if (!result.ign) {
     const candidate = lines.find(
       (l) => !/^\d+$/.test(l) && l.length > 1 && !/^(server|servidor|srv)/i.test(l),
     );
