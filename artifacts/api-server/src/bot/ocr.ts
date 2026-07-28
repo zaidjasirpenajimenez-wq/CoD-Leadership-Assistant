@@ -141,26 +141,36 @@ export function parseProfileFromText(text: string): ProfileScan {
       if (nextNum) { result.gameServer = nextNum[1]; i++; continue; }
     }
 
-    // ── "Alianza" label → alliance name on next line ─────────────────────────
+    // ── "Alianza" label → alliance name in the next few lines ───────────────
+    // With PSM 11 each text element is on its own line, so "Facción" (the
+    // right-column header) often appears between "Alianza" and "[-NFL]".
+    // We scan up to 4 lines ahead, skipping any faction-related line.
     if (!result.alliance && /\balianza\b/i.test(line)) {
-      const nextLine = (lines[i + 1] ?? "").trim();
-      if (nextLine.length > 0 && !/^(facción|faction)/i.test(nextLine)) {
-        // Take the first bracket group or first whitespace-delimited token
-        const clean = nextLine.match(/^(\[[^\]]*\]|\S+)/);
-        result.alliance = clean ? clean[1] : nextLine.split(/\s{2,}/)[0];
-        i++;
-        continue;
+      for (let j = i + 1; j <= i + 4 && j < lines.length; j++) {
+        const candidate = lines[j].trim();
+        if (candidate.length === 0) continue;
+        // Skip the "Facción" column header (OCR variants: Facción, Faccion, Faccón…)
+        if (/^facc/i.test(candidate)) continue;
+        // Stop if we've reached a known stats section
+        if (/^(poder|m[eé]rito|servidor|distinciones)/i.test(candidate)) break;
+        // Take bracket groups like [-NFL] or the first non-space token
+        const clean = candidate.match(/^(\[[^\]]*\]|\S+)/);
+        result.alliance = clean ? clean[1] : candidate.split(/\s{2,}/)[0];
+        i = j;
+        break;
       }
+      continue;
     }
 
     // ── Numeric # tokens: server (#NNN) or character ID (#NNNNNNN) ──────────
-    // Division codes like #SoS7-9040 start with a letter and won't match
-    // /#([\d\-]{3,})/ so they're naturally ignored here.
+    // Match on the RAW line (not normalized) so that Division codes like
+    // "#50S7-9040" or "#SoS7-9040" — which contain letters — never match
+    // /#([\d\-]{3,})/ and are therefore naturally excluded.
+    // norm() is applied only to the extracted digit string (e.g. O→0, I→1).
     if (!result.gameServer || !result.characterId) {
-      const normLine = line.replace(/S/g, "5").replace(/O/g, "0").replace(/[lI]/g, "1");
-      const tokens = [...normLine.matchAll(/#([\d\-]{3,})/g)];
+      const tokens = [...line.matchAll(/#([\d\-]{3,})/g)];
       for (const tok of tokens) {
-        const digits = tok[1].replace(/-/g, "");
+        const digits = norm(tok[1]).replace(/-/g, "");
         if (digits.length <= 5 && !result.gameServer) {
           result.gameServer = digits;
         } else if (digits.length >= 6 && !result.characterId) {
