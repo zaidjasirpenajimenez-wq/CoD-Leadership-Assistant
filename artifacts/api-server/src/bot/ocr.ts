@@ -114,18 +114,32 @@ export function parseProfileFromText(text: string): ProfileScan {
         if (idMatch) result.characterId = norm(idMatch[1]);
       }
       if (!result.ign) {
-        // IGN may be inline ("Lord NfL Zxid") or on the next line
+        // IGN may be inline ("Lord NfL Zxid") or on one of the next lines.
+        // With PSM 11 there can be garbage tokens between "Lord" and the real IGN
+        // (e.g. "(2", "y", "'") — skip any candidate that is too short or has
+        // fewer than 2 actual letters.
+        const letterCount = (s: string) => (s.match(/[a-záéíóúüñA-ZÁÉÍÓÚÜÑ]/g) ?? []).length;
+        const isValidIgn = (s: string) =>
+          s.length >= 3 &&
+          !/^\d+$/.test(s) &&
+          !/^(servidor|divis|alianza|poder|m[eé]rito|distinciones|perfil)/i.test(s) &&
+          letterCount(s) >= 2;
+
         const inLine = line
           .replace(/\blord[\s:]*/i, "")
-          .replace(/\bID[:\s]+\d+\b/gi, "")
+          .replace(/\b[I1]D[:\s]+\d+\b/gi, "")
           .trim();
-        if (inLine.length > 1) {
+        if (isValidIgn(inLine)) {
           result.ign = inLine;
         } else {
-          const nextLine = (lines[i + 1] ?? "").trim();
-          if (nextLine.length > 1 && !/^\d+$/.test(nextLine)) {
-            result.ign = nextLine;
-            i++;
+          // Scan up to 3 lines ahead for the first valid IGN candidate
+          for (let j = i + 1; j <= i + 3 && j < lines.length; j++) {
+            const candidate = lines[j].trim();
+            if (isValidIgn(candidate)) {
+              result.ign = candidate;
+              i = j;
+              break;
+            }
           }
         }
       }
