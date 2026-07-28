@@ -1,6 +1,7 @@
 import app from "./app";
 import { logger } from "./lib/logger";
 import { startBot } from "./bot/client";
+import { terminateOcrWorker } from "./bot/ocr";
 
 const rawPort = process.env["PORT"];
 
@@ -26,3 +27,12 @@ app.listen(port, (err?: Error) => {
 startBot().catch((err) => {
   logger.error({ err }, "Bot startup failed");
 });
+
+// ── Graceful shutdown ────────────────────────────────────────────────────────
+async function shutdown(signal: string) {
+  logger.info({ signal }, "Shutdown signal received — cleaning up");
+  await terminateOcrWorker().catch(() => {});
+  process.exit(0);
+}
+process.on("SIGTERM", () => shutdown("SIGTERM"));
+process.on("SIGINT",  () => shutdown("SIGINT"));

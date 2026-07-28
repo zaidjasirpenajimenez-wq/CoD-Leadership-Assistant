@@ -123,7 +123,7 @@ export async function handleDiplomacyCommand(interaction: ChatInputCommandIntera
       await DiplomacyPact.findOneAndUpdate(
         { guildId, targetAlliance: alianza },
         { pactType: tipo, details: detalles, createdBy: interaction.user.id, createdAt: new Date(), expiresAt },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       const meta = PACT_META[tipo];

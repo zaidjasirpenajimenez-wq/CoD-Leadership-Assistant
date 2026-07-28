@@ -161,7 +161,7 @@ export async function handlePointsCommand(
       const updated = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },
         { $inc: { weeklyPoints: cantidad, totalPoints: cantidad }, $set: { lastActivity: NOW() } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({
@@ -186,7 +186,7 @@ export async function handlePointsCommand(
       const updated = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },
         { $inc: { weeklyPoints: -cantidad, totalPoints: -cantidad }, $set: { lastActivity: NOW() } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({

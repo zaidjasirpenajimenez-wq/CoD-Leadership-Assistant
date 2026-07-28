@@ -196,7 +196,7 @@ export async function handleMisionCommand(interaction: ChatInputCommandInteracti
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: TOTAL_REWARD_PTS, totalPoints: TOTAL_REWARD_PTS }, $set: { lastActivity: new Date() } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       const memberName = interaction.guild.members.cache.get(userId)?.displayName ?? interaction.user.username;

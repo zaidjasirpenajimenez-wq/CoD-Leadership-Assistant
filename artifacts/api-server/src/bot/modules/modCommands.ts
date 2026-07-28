@@ -181,7 +181,7 @@ export async function handleModCommand(interaction: ChatInputCommandInteraction)
       const profile = await UserProfile.findOneAndUpdate(
         { discordId: target.id, guildId },
         { $inc: { warns: 1 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
       const warns = profile?.warns ?? 1;
 

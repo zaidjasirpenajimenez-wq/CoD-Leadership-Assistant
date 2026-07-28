@@ -213,7 +213,7 @@ export async function handleOperationsButton(
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: 10, totalPoints: 10 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
     } catch (err) {
       logger.error({ err }, "Failed to award raid points");
@@ -269,7 +269,7 @@ export async function handleOperationsButton(
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: 5, totalPoints: 5 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
     } catch (err) {
       logger.error({ err }, "Failed to award building points");

@@ -30,11 +30,6 @@ export async function processImageOcr(imageUrl: string): Promise<string> {
     } catch (err) {
       logger.error({ err }, "OCR processing failed");
       throw err;
-    } finally {
-      // Free cached image data from memory after each run (anti-OOM)
-      await worker.setParameters({
-        preserve_interword_spaces: "0",
-      });
     }
   });
   // Chain the queue so the next call waits for this one, but don't let

@@ -299,7 +299,7 @@ export async function handleCommunicationButton(
         await UserProfile.findOneAndUpdate(
           { discordId: userId, guildId },
           { $inc: { weeklyPoints: 10, totalPoints: 10, eventsAttended: 1 } },
-          { upsert: true, new: true, setDefaultsOnInsert: true },
+          { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
         );
       } catch (err) {
         logger.error({ err }, "Failed to award event points");

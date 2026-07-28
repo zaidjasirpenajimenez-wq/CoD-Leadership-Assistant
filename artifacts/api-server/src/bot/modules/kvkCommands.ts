@@ -104,14 +104,14 @@ export async function handleKvkCommand(interaction: ChatInputCommandInteraction)
       await KvkRecord.findOneAndUpdate(
         { guildId, discordId: targetUser.id, seasonName },
         { kills, deaths, powerDestroyed, score },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       // Also award weekly points for participation
       await UserProfile.findOneAndUpdate(
         { discordId: targetUser.id, guildId },
         { $inc: { weeklyPoints: 15, totalPoints: 15 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({

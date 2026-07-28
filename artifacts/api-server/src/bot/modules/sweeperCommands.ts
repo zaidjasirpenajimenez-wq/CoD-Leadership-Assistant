@@ -13,6 +13,25 @@ import { checkBlacklist } from "./blacklistCommands";
 import { processImageOcr, parseProfileFromText } from "../ocr";
 import { logger } from "../../lib/logger";
 
+// ── GuildConfig cache ────────────────────────────────────────────────────────
+// Avoids a MongoDB round-trip on every message in the verification channel.
+// TTL: 60 seconds — short enough that /setup changes take effect quickly.
+const configCache = new Map<string, { data: Awaited<ReturnType<typeof GuildConfig.findOne>>; expiresAt: number }>();
+const CONFIG_TTL_MS = 60_000;
+
+async function getCachedConfig(guildId: string) {
+  const cached = configCache.get(guildId);
+  if (cached && Date.now() < cached.expiresAt) return cached.data;
+  const data = await GuildConfig.findOne({ guildId }).catch(() => null);
+  configCache.set(guildId, { data, expiresAt: Date.now() + CONFIG_TTL_MS });
+  return data;
+}
+
+/** Call after /setup runs so the next verification picks up fresh config */
+export function invalidateConfigCache(guildId: string): void {
+  configCache.delete(guildId);
+}
+
 export const sweeperCommandDefs = [
   new SlashCommandBuilder()
     .setName("roster")
@@ -47,7 +66,7 @@ export function registerVerificationListener(client: Client): void {
   client.on(Events.MessageCreate, async (message: Message) => {
     if (message.author.bot || !message.guild) return;
 
-    const config = await GuildConfig.findOne({ guildId: message.guild.id }).catch(() => null);
+    const config = await getCachedConfig(message.guild.id);
     if (!config?.channels?.playerVerification) return;
     if (message.channelId !== config.channels.playerVerification) return;
 
@@ -56,6 +75,9 @@ export function registerVerificationListener(client: Client): void {
       a.contentType?.startsWith("image/"),
     );
     if (!imageAttachment) return;
+
+    // Show typing indicator so the user knows the bot is working
+    await message.channel.sendTyping().catch(() => {});
 
     try {
       const text = await processImageOcr(imageAttachment.url);
@@ -300,7 +322,7 @@ export function registerVerificationListener(client: Client): void {
           alliance: profile.alliance ?? existing?.alliance ?? "",
           verifiedAt: existing ? existing.verifiedAt : new Date(),
         },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       // Name change detection

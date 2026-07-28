@@ -340,7 +340,7 @@ export async function handleEventoButton(interaction: ButtonInteraction): Promis
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: 10, totalPoints: 10, eventsAttended: 1 }, $set: { lastActivity: new Date() } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       ).catch((err) => { logger.error({ err, userId }, "Failed to award evento RSVP points"); });
     }
 

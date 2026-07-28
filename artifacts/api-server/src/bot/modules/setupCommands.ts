@@ -84,7 +84,7 @@ export async function handleSetupCommand(
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { allianceTag: tag, gameServerId: servidor },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({
@@ -139,7 +139,7 @@ export async function handleSetupCommand(
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { $set: update },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       const updated = Object.keys(update).length;
@@ -180,7 +180,7 @@ export async function handleSetupCommand(
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { inactiveDays: dias },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({
@@ -212,7 +212,7 @@ export async function handleSetupCommand(
       await GuildConfig.findOneAndUpdate(
         { guildId },
         { $set: { guestRoleId: guestRole.id, memberRoleId: memberRole.id } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
 
       await interaction.reply({

@@ -326,7 +326,7 @@ export async function handleSpyButton(interaction: ButtonInteraction): Promise<v
     const report = await SpyReport.findByIdAndUpdate(
       reportId,
       { status: newStatus, reviewedBy: interaction.user.id },
-      { new: true },
+      { returnDocument: "after" },
     );
     if (!report) {
       await interaction.reply({ content: "❌ Reporte no encontrado.", ephemeral: true });

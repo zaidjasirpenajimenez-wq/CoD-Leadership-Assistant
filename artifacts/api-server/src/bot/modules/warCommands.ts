@@ -96,6 +96,16 @@ interface AlertData {
 
 const alertResponses = new Map<string, AlertData>();
 
+// Purge alert entries older than 24 h to prevent unbounded memory growth.
+// Called each time a new alert is created so no separate timer is needed.
+const ALERT_TTL_MS = 24 * 60 * 60 * 1000;
+function purgeStaleAlerts() {
+  const cutoff = Date.now() - ALERT_TTL_MS;
+  for (const [id, data] of alertResponses) {
+    if (data.createdAt.getTime() < cutoff) alertResponses.delete(id);
+  }
+}
+
 const PRIORITY_COLOR: Record<string, number>  = { Critical: 0xed4245, High: 0xff7b00, Medium: 0xfee75c, Low: 0x57f287 };
 const PRIORITY_EMOJI: Record<string, string>  = { Critical: "🔴", High: "🟠", Medium: "🟡", Low: "🟢" };
 const PRIORITY_LABEL: Record<string, string>  = { Critical: "CRÍTICO", High: "ALTO", Medium: "MEDIO", Low: "BAJO" };
@@ -197,6 +207,7 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         components: buildAlertButtons("PLACEHOLDER"),
         allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: ["everyone"] },
       });
+      purgeStaleAlerts();
       alertResponses.set(msg.id, {
         ready: [], late: [], no: [], pointedUsers: new Set(),
         priority, details, guildId,
@@ -397,7 +408,7 @@ export async function handleAlertButton(interaction: ButtonInteraction): Promise
         await UserProfile.findOneAndUpdate(
           { discordId: userId, guildId },
           { $inc: { weeklyPoints: 3, totalPoints: 3 } },
-          { upsert: true, new: true, setDefaultsOnInsert: true },
+          { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
         );
         responseLabel += " +3 pts acreditados 🏅";
       } catch (err) {
@@ -536,7 +547,7 @@ export async function handleAlertExtraSelect(interaction: UserSelectMenuInteract
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: 5, totalPoints: 5 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
       const name = members.get(userId)?.displayName ?? `<@${userId}>`;
       lines.push(`👥 **${name}** — +5 pts`);
@@ -577,7 +588,7 @@ export async function handleAlertConfirmSelect(interaction: StringSelectMenuInte
       await UserProfile.findOneAndUpdate(
         { discordId: userId, guildId },
         { $inc: { weeklyPoints: pts, totalPoints: pts } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
       const name = guildMembers.get(userId)?.displayName ?? `<@${userId}>`;
       const icon = isLate ? "⏳" : "✅";

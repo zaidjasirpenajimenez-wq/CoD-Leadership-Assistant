@@ -314,7 +314,7 @@ export async function handleResourceButton(interaction: ButtonInteraction): Prom
       await UserProfile.findOneAndUpdate(
         { discordId: data.donorId, guildId },
         { $inc: { weeklyPoints: 5, totalPoints: 5 } },
-        { upsert: true, new: true, setDefaultsOnInsert: true },
+        { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
       );
     } catch (err) { logger.error({ err }, "Failed to award resource donation points"); }
 

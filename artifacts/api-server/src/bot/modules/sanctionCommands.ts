@@ -94,7 +94,7 @@ export async function handleSanctionCommand(
         await UserProfile.findOneAndUpdate(
           { discordId: target.id, guildId },
           { $inc: { weeklyPoints: -penalty, totalPoints: -penalty } },
-          { upsert: true, new: true, setDefaultsOnInsert: true },
+          { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
         ).catch(() => {});
       }
 

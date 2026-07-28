@@ -256,7 +256,7 @@ export async function handleRallyButton(interaction: ButtonInteraction): Promise
     await UserProfile.findOneAndUpdate(
       { discordId: userId, guildId },
       { $inc: { weeklyPoints: 10, totalPoints: 10 } },
-      { upsert: true, new: true, setDefaultsOnInsert: true },
+      { upsert: true, returnDocument: "after", setDefaultsOnInsert: true },
     ).catch(() => {});
 
     const oldEmbed = interaction.message.embeds[0];
