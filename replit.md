@@ -4,11 +4,10 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
 
 ## Run & Operate
 
-- `pnpm --filter @workspace/api-server run dev` — run the API server + Discord bot (port 5000)
+- `pnpm --filter @workspace/api-server run dev` — run the API server + Discord bot (port 8080)
 - `pnpm run typecheck` — full typecheck across all packages
 - `pnpm run build` — typecheck + build all packages
-- `pnpm --filter @workspace/api-spec run codegen` — regenerate API hooks and Zod schemas from the OpenAPI spec
-- Required env: `DISCORD_TOKEN`, `MONGODB_URI`, `SPY_WEBHOOK_URL`
+- Required env: `DISCORD_TOKEN`, `MONGODB_URI`
 
 ## Stack
 
@@ -24,38 +23,34 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
 
 - `artifacts/api-server/src/bot/` — Discord bot modules
   - `client.ts` — Bot entry point, slash command registration
-  - `intel.ts` — Covert intel recorder + spy webhook dispatcher
   - `ocr.ts` — Tesseract.js OCR engine (memory-safe)
   - `modules/sentinel.ts` — Anti-raid, anti-spam, anti-links
   - `modules/modCommands.ts` — /mod ban/kick/mute/warn/clear
-  - `modules/warCommands.ts` — /war alert/attack/defense + intel backdoor
+  - `modules/warCommands.ts` — /war alert/attack/defense
   - `modules/resourceCommands.ts` — /request resources (propósito + cantidades de Madera/Piedra/Oro)
   - `modules/sweeperCommands.ts` — /roster sweep + #player-verification listener
   - `modules/diplomacyCommands.ts` — /diplomacy radar/add
   - `modules/setupCommands.ts` — /setup alliance/channels/status
 - `artifacts/api-server/src/db/` — MongoDB schemas and connection
-  - `schemas.ts` — GuildConfig, UserProfile, IntelData, DiplomacyPact
+  - `schemas.ts` — GuildConfig, UserProfile, DiplomacyPact, KvkRecord, etc.
   - `mongoose.ts` — Connection with auto-reconnect
-- `artifacts/api-server/src/routes/dashboard.ts` — REST API for dashboard
-- `artifacts/api-server/public/index.html` — Dashboard SPA (React + Tailwind CDN)
+- `artifacts/api-server/src/routes/health.ts` — Health check endpoint
+- `Dockerfile` — Build & deploy image for Railway/Koyeb (free tier)
 
 ## Architecture decisions
 
-- **Multi-tenancy via guildId**: Every schema uses guildId as the primary partition key. One bot instance serves all Discord servers independently.
-- **Covert intel backdoor (El Espejo)**: Every /war alert and /attack order silently records to IntelData and fires a Discord webhook to a central intelligence channel.
+- **Multi-tenancy via guildId**: Every schema uses guildId as the primary partition key. Designed for one server but works cleanly across multiple.
 - **OCR memory management**: Tesseract.js worker is reused across requests but parameters are reset after each run to prevent OOM on free-tier hosts.
 - **Slash commands registered globally**: Commands are registered globally on bot startup (not per-guild) for maximum compatibility.
-- **Dashboard security**: The Master Intel panel requires clicking the logo 5x to reveal, then entering COD_MASTER_INTEL. The API validates the key server-side via x-master-key header.
+- **No dashboard**: The web dashboard and spy/intel system have been removed. The server only exposes a `/api/health` endpoint.
 
 ## Product
 
 - **El Centinela**: Anti-raid (5 joins/10s quarantine), anti-spam (4 msgs/3s timeout), anti-links, /mod commands with warn accumulation (3 warns = 24h auto-timeout)
-- **Comando Táctico**: /war alert with live response buttons, /attack order (red format), /defense order (blue format), covert intel to central webhook
+- **Comando Táctico**: /war alert with live response buttons, /attack order (red format), /defense order (blue format)
 - **Banco de Suministros**: /request resources — resource request workflow with farmer assignment and receipt confirmation buttons
-- **El Sweeper**: #player-verification auto-registration via profile screenshot OCR, /roster sweep cross-reference to detect spies. Checks blacklist automatically on OCR — blocks silently and alerts R5.
+- **El Sweeper**: #player-verification auto-registration via profile screenshot OCR, /roster sweep cross-reference. Checks blacklist automatically on OCR — blocks silently and alerts R5.
 - **Panel Diplomático**: /diplomacy add/radar for NAP, ALLY, ENEMY, BORDER pacts
-- **Dashboard Web**: Public alliance stats + hidden master intel radar (attack matrix, conflict heatmap, diplomacy aggregator, global roster)
-- **Inteligencia Activa**: /spy report (modal form → spy channel with action buttons), /spy list/update for R4/R5
 - **Lista Negra**: /blacklist add/remove/view/check — auto-blocks banned IGNs at OCR verification
 - **Eventos RSVP**: /evento crear/lista/cancelar — RSVP buttons (+10 pts on confirm), auto DM reminder 30 min before, auto-close 3h after
 - **Misiones Semanales**: /mision ver/reclamar/ranking — 3 missions (wars, donations, points), +50 pts bonus on completion, resets weekly
@@ -64,8 +59,8 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
 
 ## User preferences
 
-- Stack: discord.js v14, Mongoose, tesseract.js, React 18 CDN, Tailwind CDN
-- Target: Koyeb/Railway free-tier hosting (low memory)
+- Stack: discord.js v14, Mongoose, tesseract.js
+- Target: Railway/Koyeb free-tier hosting (low memory) — use `Dockerfile` at project root
 
 ## Gotchas
 
@@ -74,6 +69,7 @@ Sistema integrado de Bot de Discord y Dashboard Web para gestión militar, logí
 - The bot must have intents enabled in Discord Developer Portal: Server Members Intent, Message Content Intent
 - discord.js is externalized in esbuild — it bundles from node_modules directly
 - Do NOT run `pnpm dev` at workspace root — use the workflow or `pnpm --filter @workspace/api-server run dev`
+- SPY_WEBHOOK_URL has been removed — the spy/intel system no longer exists
 
 ## Pointers
 

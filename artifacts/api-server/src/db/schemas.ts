@@ -14,7 +14,7 @@ export interface IGuildConfig extends Document {
     leaderboard?: string;
     announcements?: string;
     weeklyReport?: string;
-    spyReports?: string;
+
     eventos?: string;
   };
   gameServerId?: string;
@@ -41,7 +41,6 @@ const GuildConfigSchema = new Schema<IGuildConfig>(
       leaderboard: String,
       announcements: String,
       weeklyReport: String,
-      spyReports: String,
       eventos: String,
     },
     gameServerId: { type: String, default: null },
@@ -96,36 +95,6 @@ const UserProfileSchema = new Schema<IUserProfile>(
 export const UserProfile: Model<IUserProfile> =
   mongoose.models["UserProfile"] ||
   mongoose.model<IUserProfile>("UserProfile", UserProfileSchema);
-
-// ── IntelData ────────────────────────────────────────────────────────────────
-export interface IIntelData extends Document {
-  sourceGuildId: string;
-  allianceTag: string;
-  actionType: "ATTACK" | "DEFENSE" | "ALERT";
-  coords: string;
-  details: string;
-  reportedBy: string;
-  timestamp: Date;
-}
-
-const IntelDataSchema = new Schema<IIntelData>(
-  {
-    sourceGuildId: { type: String, required: true, index: true },
-    allianceTag: { type: String, required: true },
-    actionType: { type: String, enum: ["ATTACK", "DEFENSE", "ALERT"], required: true },
-    coords: { type: String, required: true },
-    details: { type: String, default: "" },
-    reportedBy: { type: String, default: "system" },
-    timestamp: { type: Date, default: Date.now, index: true },
-  },
-  { strict: true },
-);
-
-IntelDataSchema.index({ sourceGuildId: 1, allianceTag: 1 });
-
-export const IntelData: Model<IIntelData> =
-  mongoose.models["IntelData"] ||
-  mongoose.model<IIntelData>("IntelData", IntelDataSchema);
 
 // ── DiplomacyPact ────────────────────────────────────────────────────────────
 export interface IDiplomacyPact extends Document {
@@ -311,37 +280,6 @@ const ScheduledTimerSchema = new Schema<IScheduledTimer>(
 export const ScheduledTimer: Model<IScheduledTimer> =
   mongoose.models["ScheduledTimer"] ||
   mongoose.model<IScheduledTimer>("ScheduledTimer", ScheduledTimerSchema);
-
-// ── SpyReport ─────────────────────────────────────────────────────────────────
-export interface ISpyReport extends Document {
-  guildId: string;
-  reporterId: string;
-  suspectDiscordId: string | null;
-  suspectIGN: string;
-  suspectAlliance: string | null;
-  description: string;
-  status: "open" | "investigating" | "cleared" | "confirmed";
-  reviewedBy?: string;
-  createdAt: Date;
-}
-
-const SpyReportSchema = new Schema<ISpyReport>(
-  {
-    guildId:          { type: String, required: true, index: true },
-    reporterId:       { type: String, required: true },
-    suspectDiscordId: { type: String, default: null },
-    suspectIGN:       { type: String, required: true },
-    suspectAlliance:  { type: String, default: null },
-    description:      { type: String, required: true },
-    status:           { type: String, enum: ["open", "investigating", "cleared", "confirmed"], default: "open" },
-    reviewedBy:       { type: String, default: null },
-  },
-  { timestamps: true, strict: true },
-);
-
-export const SpyReport: Model<ISpyReport> =
-  mongoose.models["SpyReport"] ||
-  mongoose.model<ISpyReport>("SpyReport", SpyReportSchema);
 
 // ── BlacklistEntry ────────────────────────────────────────────────────────────
 export interface IBlacklistEntry extends Document {

@@ -50,7 +50,6 @@ import { statsCommandDefs, handleStatsCommand } from "./modules/statsCommands";
 import { memberCommandDefs, handleMemberCommand } from "./modules/memberCommands";
 import { startWeeklyReport } from "./modules/weeklyReport";
 // ── New Tier 1 & 2 modules ────────────────────────────────────────────────────
-import { spyCommandDefs, handleSpyCommand, handleSpyModal, handleSpyButton } from "./modules/spyCommands";
 import { blacklistCommandDefs, handleBlacklistCommand } from "./modules/blacklistCommands";
 import { eventoCommandDefs, handleEventoCommand, handleEventoButton, startEventoScheduler } from "./modules/eventoCommands";
 import { misionCommandDefs, handleMisionCommand } from "./modules/misionCommands";
@@ -76,7 +75,6 @@ const ALL_COMMANDS = [
   ...memberCommandDefs,
   ...donateCommandDefs,
   // New
-  ...spyCommandDefs,
   ...blacklistCommandDefs,
   ...eventoCommandDefs,
   ...misionCommandDefs,
@@ -262,10 +260,7 @@ async function handleChatCommand(interaction: ChatInputCommandInteraction): Prom
     case "rally":
       await handleRallyCommand(interaction);
       break;
-    // ── Tier 1: Inteligencia ──────────────────────────────────────────────
-    case "spy":
-      await handleSpyCommand(interaction);
-      break;
+    // ── Lista Negra ───────────────────────────────────────────────────────
     case "blacklist":
       await handleBlacklistCommand(interaction);
       break;
@@ -306,8 +301,6 @@ async function handleButton(interaction: ButtonInteraction): Promise<void> {
     await handleSosButton(interaction);
   } else if (customId.startsWith("rally_")) {
     await handleRallyButton(interaction);
-  } else if (customId.startsWith("spy_inv:") || customId.startsWith("spy_confirm:") || customId.startsWith("spy_clear:")) {
-    await handleSpyButton(interaction);
   } else if (customId.startsWith("poll_vote:")) {
     await handlePollButton(interaction);
   }
@@ -335,7 +328,5 @@ async function handleModal(interaction: ModalSubmitInteraction): Promise<void> {
     interaction.customId === "modal_event"
   ) {
     await handleCommunicationModal(interaction);
-  } else if (interaction.customId === "spy_report_modal") {
-    await handleSpyModal(interaction);
   }
 }

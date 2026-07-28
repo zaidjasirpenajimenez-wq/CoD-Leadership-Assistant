@@ -16,7 +16,6 @@ import {
   UserSelectMenuInteraction,
 } from "discord.js";
 import { GuildConfig, UserProfile, WarAlertLog } from "../../db/schemas";
-import { recordIntel } from "../intel";
 import { logger } from "../../lib/logger";
 
 export const warCommandDefs = [
@@ -217,15 +216,6 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       await msg.edit({ components: buildAlertButtons(msg.id) });
       await interaction.reply({ content: `✅ Alerta publicada en ${chan}`, ephemeral: true });
 
-      await recordIntel({
-        sourceGuildId: guildId,
-        allianceTag: config?.allianceTag ?? "UNKNOWN",
-        actionType: "ALERT",
-        coords: "N/A",
-        details: `[ALERT] Priority: ${priority} — ${details}`,
-        reportedBy: interaction.user.id,
-      });
-
     } else if (sub === "attack") {
       const objetivo    = interaction.options.getString("objetivo", true);
       const coords      = interaction.options.getString("coordenadas", true);
@@ -268,15 +258,6 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
       });
       await interaction.reply({ content: `⚔️ Orden publicada en ${chan}`, ephemeral: true });
 
-      await recordIntel({
-        sourceGuildId: guildId,
-        allianceTag: config?.allianceTag ?? "UNKNOWN",
-        actionType: "ATTACK",
-        coords,
-        details: `Objetivo: ${objetivo} | Tropa: ${tropa} | Hora: ${hora}`,
-        reportedBy: interaction.user.id,
-      });
-
     } else if (sub === "defense") {
       const estructura  = interaction.options.getString("estructura", true);
       const coords      = interaction.options.getString("coordenadas", true);
@@ -317,15 +298,6 @@ export async function handleWarCommand(interaction: ChatInputCommandInteraction)
         allowedMentions: mentionRole ? { roles: [mentionRole.id] } : { parse: [] },
       });
       await interaction.reply({ content: `🛡️ Orden de defensa publicada en ${chan}`, ephemeral: true });
-
-      await recordIntel({
-        sourceGuildId: guildId,
-        allianceTag: config?.allianceTag ?? "UNKNOWN",
-        actionType: "DEFENSE",
-        coords,
-        details: `Estructura: ${estructura} | Capitán: ${capitan} | Prioridad: ${priority}`,
-        reportedBy: interaction.user.id,
-      });
 
     } else if (sub === "history") {
       await interaction.deferReply({ ephemeral: true });
