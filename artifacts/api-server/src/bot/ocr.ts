@@ -93,8 +93,18 @@ export interface ProfileScan {
   alliance: string | null;
 }
 
+/** Decode HTML entities that the Discord attachment URL pipeline may inject */
+function decodeHtml(s: string): string {
+  return s
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'");
+}
+
 export function parseProfileFromText(text: string): ProfileScan {
-  const lines = text.split(/\n/).map((l) => l.trim()).filter(Boolean);
+  const lines = decodeHtml(text).split(/\n/).map((l) => l.trim()).filter(Boolean);
   const result: ProfileScan = { characterId: null, ign: null, gameServer: null, alliance: null };
 
   // Normalize OCR digit-substitution artifacts in a string
