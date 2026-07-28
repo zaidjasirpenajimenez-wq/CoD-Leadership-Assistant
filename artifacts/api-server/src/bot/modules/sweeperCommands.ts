@@ -62,18 +62,18 @@ export function registerVerificationListener(client: Client): void {
       logger.info({ guildId: message.guild.id, userId: message.author.id, ocrText: text }, "OCR raw text");
       const profile = parseProfileFromText(text);
 
-      if (!profile.characterId) {
+      if (!profile.ign) {
         await message.reply({
           embeds: [
             new EmbedBuilder()
-              .setTitle("❌  OCR — Character ID No Detectado")
+              .setTitle("❌  OCR — IGN No Detectado")
               .setColor(0xed4245)
               .setDescription(
                 `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `No se pudo leer un **Character ID** en tu imagen.\n` +
+                `No se pudo leer tu **nombre de jugador (IGN)** en la imagen.\n` +
                 `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
               )
-              .addFields({ name: "💡 ¿Qué hacer?", value: "Sube una captura **clara y completa** de tu perfil del juego donde el ID sea visible.", inline: false })
+              .addFields({ name: "💡 ¿Qué hacer?", value: "Sube una captura **clara y completa** de tu perfil del juego.", inline: false })
               .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
               .setTimestamp(),
           ],
@@ -225,7 +225,6 @@ export function registerVerificationListener(client: Client): void {
                   .addFields(
                     { name: "👤 Discord",       value: `<@${discordId}>`,           inline: true },
                     { name: "🗡️ IGN detectado", value: profile.ign ?? "Desconocido", inline: true },
-                    { name: "🆔 Character ID",  value: profile.characterId ?? "?",  inline: true },
                   )
                   .setTimestamp()
                   .setFooter({ text: "Kingdom Guardian Pro  •  Revisión Manual Requerida" }),
@@ -287,62 +286,17 @@ export function registerVerificationListener(client: Client): void {
         }
       }
 
-      // Check if character ID already exists (could be a different user — spy alert)
-      const existing = await UserProfile.findOne({ characterId: profile.characterId });
+      // Look up existing profile for this Discord user in this guild
+      const existing = await UserProfile.findOne({ discordId, guildId });
 
-      if (existing && existing.discordId !== discordId) {
-        const chan = message.guild.channels.cache.get(config.channels.modLogs ?? "") as TextChannel | undefined;
-        if (chan) {
-          await chan.send({
-            embeds: [
-              new EmbedBuilder()
-                .setAuthor({ name: message.author.username, iconURL: message.author.displayAvatarURL() })
-                .setTitle("🚨  ALERTA DE ESPÍA — Character ID Duplicado")
-                .setColor(0xed4245)
-                .setDescription(
-                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                  `Un Character ID ya registrado fue reclamado por **otra** cuenta de Discord.\n` +
-                  `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-                )
-                .addFields(
-                  { name: "🆔 Character ID",    value: `\`${profile.characterId}\``,   inline: true },
-                  { name: "🗡️ IGN detectado",   value: profile.ign ?? "Desconocido",   inline: true },
-                  { name: "\u200b",              value: "\u200b",                       inline: true },
-                  { name: "✅ Cuenta original", value: `<@${existing.discordId}>`,     inline: true },
-                  { name: "⚠️ Nuevo intento",   value: `<@${discordId}>`,              inline: true },
-                  { name: "\u200b",              value: "\u200b",                       inline: true },
-                )
-                .setTimestamp()
-                .setFooter({ text: "Kingdom Guardian Pro  •  Sistema Anti-Espía" }),
-            ],
-          });
-        }
-        await message.reply({
-          embeds: [
-            new EmbedBuilder()
-              .setTitle("⚠️  Character ID Ya Registrado")
-              .setColor(0xed4245)
-              .setDescription(
-                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-                `Este Character ID ya está vinculado a **otra cuenta de Discord**.\n` +
-                `El caso fue reportado automáticamente a los moderadores.\n` +
-                `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
-              )
-              .setFooter({ text: "Kingdom Guardian Pro  •  Sistema de Verificación" })
-              .setTimestamp(),
-          ],
-        });
-        return;
-      }
-
-      // Upsert profile
+      // Upsert profile keyed on discordId + guildId
       await UserProfile.findOneAndUpdate(
-        { characterId: profile.characterId },
+        { discordId, guildId },
         {
           discordId,
           guildId,
-          ign: profile.ign ?? existing?.ign ?? "Desconocido",
-          characterId: profile.characterId,
+          ign: profile.ign,
+          characterId: profile.characterId ?? existing?.characterId ?? "",
           alliance: profile.alliance ?? existing?.alliance ?? "",
           verifiedAt: existing ? existing.verifiedAt : new Date(),
         },
@@ -366,11 +320,9 @@ export function registerVerificationListener(client: Client): void {
           await member.roles.remove(guestRoleId);
         }
 
-        // ── Nickname: "IGN | ID" ─────────────────────────────────────────────
+        // ── Nickname: IGN (Discord limit: 32 chars) ──────────────────────────
         if (profile.ign) {
-          const ign      = profile.ign.slice(0, 20); // cap to leave room for ID
-          const idSuffix = profile.characterId ? ` | ${profile.characterId}` : "";
-          const nick     = `${ign}${idSuffix}`.slice(0, 32); // Discord limit
+          const nick = profile.ign.slice(0, 32);
           await member.setNickname(nick, "Verificación automática OCR").catch((nickErr) => {
             logger.warn({ nickErr, userId: discordId }, "Could not set nickname during verification");
           });
@@ -393,9 +345,8 @@ export function registerVerificationListener(client: Client): void {
               `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`,
             )
             .addFields(
-              { name: "🆔 Character ID",  value: `\`${profile.characterId}\``,                      inline: true },
-              { name: "🗡️ IGN",           value: profile.ign ?? "Extraído",                          inline: true },
-              { name: "🎖️ Estado",        value: nameChanged ? "🔄 Nombre actualizado" : roleStatus, inline: true },
+              { name: "🗡️ IGN",    value: profile.ign,                                              inline: true },
+              { name: "🎖️ Estado", value: nameChanged ? "🔄 Nombre actualizado" : roleStatus,       inline: true },
               ...(profile.gameServer ? [{ name: "🎮 Servidor", value: `#${profile.gameServer}`, inline: true }] : []),
               ...(profile.alliance   ? [{ name: "⚔️ Alianza",   value: profile.alliance,         inline: true }] : []),
             )
